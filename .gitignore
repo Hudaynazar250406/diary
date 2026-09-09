@@ -1,0 +1,28 @@
+# Внутреннее окружение
+.env
+
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# Кэш
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Отчеты о покрытии кода
+.coverage
+coverage.xml
+htmlcov/
+
+# БД
+instance/*.db
+instance/*.sqlite
+instance/*.sqlite3
+
+# Логи
+.log
