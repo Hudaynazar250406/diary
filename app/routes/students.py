@@ -32,3 +32,29 @@ def get_student(student_id):
         return jsonify({"error": "Student not found"}), 404
 
     return jsonify(student.to_dict()), 200
+
+
+@students_bp.put("/<int:student_id>")
+def update_student(student_id):
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Request body is required"}), 400
+
+    student, error = StudentService.update(student_id, data)
+    if error == "Student not found":
+        return jsonify({"error": error}), 404
+    if error:
+        return jsonify({"error": error}), 400
+
+    return jsonify(student.to_dict()), 200
+
+
+@students_bp.delete("/<int:student_id>")
+def delete_student(student_id):
+    success, error = StudentService.delete(student_id)
+    if error == "Student not found":
+        return jsonify({"error": error}), 404
+    if error:
+        return jsonify({"error": error}), 400
+
+    return "", 204
