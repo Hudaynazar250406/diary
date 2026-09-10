@@ -27,11 +27,11 @@ class GroupService:
 
     @staticmethod
     def get_by_id(group_id):
-        return Group.query.get(group_id)
+        return db.session.get(Group, group_id)
 
     @staticmethod
     def update(group_id, data):
-        group = Group.query.get(group_id)
+        group = db.session.get(Group, group_id)
         if group is None:
             return None, "Group not found"
 
@@ -53,7 +53,7 @@ class GroupService:
 
     @staticmethod
     def delete(group_id):
-        group = Group.query.get(group_id)
+        group = db.session.get(Group, group_id)
         if group is None:
             return False, "Group not found"
 

@@ -16,7 +16,7 @@ class StudentService:
         if not group_id:
             return None, "group_id is required"
 
-        group = Group.query.get(group_id)
+        group = db.session.get(Group, group_id)
         if group is None:
             return None, f"Group with id {group_id} does not exist"
 
@@ -35,11 +35,11 @@ class StudentService:
 
     @staticmethod
     def get_by_id(student_id):
-        return Student.query.get(student_id)
+        return db.session.get(Student, student_id)
 
     @staticmethod
     def update(student_id, data):
-        student = Student.query.get(student_id)
+        student = db.session.get(Student, student_id)
         if student is None:
             return None, "Student not found"
 
@@ -53,7 +53,7 @@ class StudentService:
             student.full_name = full_name
 
         if group_id is not None:
-            group = Group.query.get(group_id)
+            group = db.session.get(Group, group_id)
             if group is None:
                 return None, f"Group with id {group_id} does not exist"
             student.group_id = group_id
@@ -66,7 +66,7 @@ class StudentService:
 
     @staticmethod
     def delete(student_id):
-        student = Student.query.get(student_id)
+        student = db.session.get(Student, student_id)
         if student is None:
             return False, "Student not found"
 
