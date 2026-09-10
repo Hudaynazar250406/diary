@@ -3,7 +3,6 @@ from app.models.group import Group
 
 
 class GroupService:
-    """Бизнес-логика для сущности Group. Роуты не работают с БД напрямую."""
 
     @staticmethod
     def create(data):

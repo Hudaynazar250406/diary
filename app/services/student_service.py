@@ -4,7 +4,6 @@ from app.models.group import Group
 
 
 class StudentService:
-    """Бизнес-логика для сущности Student. Роуты не работают с БД напрямую."""
 
     @staticmethod
     def create(data):
