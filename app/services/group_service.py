@@ -1,5 +1,6 @@
 from app.extensions import db
 from app.models.group import Group
+from app.models.student import Student
 
 
 class GroupService:
@@ -56,7 +57,8 @@ class GroupService:
         if group is None:
             return False, "Group not found"
 
-        if group.students:
+        has_students = Student.query.filter_by(group_id=group_id).first() is not None
+        if has_students:
             return False, "Cannot delete group with existing students"
 
         db.session.delete(group)
