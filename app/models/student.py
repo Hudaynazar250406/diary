@@ -8,4 +8,4 @@ class Student(db.Model):
     group_id = db.Column(db.Integer, db.ForeignKey("groups.id"), nullable=False)
 
     def to_dict(self):
-        return {"id": self.id, "full_name": self.full_name, "group_id": self.group_id}
+        return {"id": self.id, "full_name": self.full_name, "group_id": self.group_id, "email": self.email}
