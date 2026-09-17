@@ -11,6 +11,7 @@ class Grade(db.Model):
     discipline_id = db.Column(db.Integer, db.ForeignKey("disciplines.id"), nullable=False)
     grade = db.Column(db.Integer, nullable=False)
     date = db.Column(db.Date, nullable=False, default=datetime.date.today)
+    discipline = db.relationship("Discipline")
 
     __table_args__ = (
         db.CheckConstraint("grade >= 1 AND grade <= 5", name="check_grade_range"),

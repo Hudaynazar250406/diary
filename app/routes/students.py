@@ -2,10 +2,14 @@ from flask import Blueprint, request, jsonify
 
 from app.services.student_service import StudentService
 
+from app.models.user import User
+from app.permissions import role_required
+
 students_bp = Blueprint("students", __name__, url_prefix="/students")
 
 
 @students_bp.post("")
+@role_required(User.ROLE_ADMIN)
 def create_student():
     data = request.get_json(silent=True)
     if not data:
@@ -19,6 +23,7 @@ def create_student():
 
 
 @students_bp.get("")
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def list_students():
     group_id = request.args.get("group_id", type=int)
     students = StudentService.list_all(group_id=group_id)
@@ -26,6 +31,7 @@ def list_students():
 
 
 @students_bp.get("/<int:student_id>")
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def get_student(student_id):
     student = StudentService.get_by_id(student_id)
     if student is None:
@@ -35,6 +41,7 @@ def get_student(student_id):
 
 
 @students_bp.put("/<int:student_id>")
+@role_required(User.ROLE_ADMIN)
 def update_student(student_id):
     data = request.get_json(silent=True)
     if not data:
@@ -50,6 +57,7 @@ def update_student(student_id):
 
 
 @students_bp.delete("/<int:student_id>")
+@role_required(User.ROLE_ADMIN)
 def delete_student(student_id):
     success, error = StudentService.delete(student_id)
     if error == "Student not found":

@@ -3,3 +3,5 @@ from .student import Student
 from .discipline import Discipline
 from .study_plan import StudyPlan
 from .grade import Grade
+from .user import User
+from .schedule import Schedule

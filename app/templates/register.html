@@ -1,0 +1,158 @@
+{% extends "base.html" %}
+
+{% block title %}Регистрация — StudentTrack{% endblock %}
+
+{% block body %}
+
+<main class="auth-shell">
+
+    <section class="auth-brand">
+
+        <div class="brand-mark">
+            ST
+        </div>
+
+        <p class="eyebrow">
+            StudentTrack
+        </p>
+
+        <h1>
+            Создайте аккаунт StudentTrack.
+        </h1>
+
+        <p class="auth-lead">
+            После регистрации вы получите доступ
+            к панели управления учебными данными.
+        </p>
+
+        <div class="security-note">
+            Пароли не сохраняются открытым текстом.
+            В базе хранится только защищённый хеш.
+        </div>
+
+    </section>
+
+    <section class="auth-panel">
+
+        <div class="auth-card">
+
+            <p class="eyebrow">
+                Новый аккаунт
+            </p>
+
+            <h2>
+                Регистрация
+            </h2>
+
+            <p class="muted">
+                Все поля обязательны.
+            </p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+
+                {% for category, message in messages %}
+
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
+
+                {% endfor %}
+
+            {% endwith %}
+
+            <form
+                method="post"
+                class="form-stack"
+            >
+
+                <label>
+
+                    <span>
+                        Имя пользователя
+                    </span>
+
+                    <input
+                        name="username"
+                        minlength="3"
+                        maxlength="50"
+                        autocomplete="username"
+                        required
+                        autofocus
+                    >
+
+                </label>
+
+                <label>
+
+                    <span>
+                        Email
+                    </span>
+
+                    <input
+                        type="email"
+                        name="email"
+                        maxlength="120"
+                        autocomplete="email"
+                        required
+                    >
+
+                </label>
+
+                <label>
+
+                    <span>
+                        Пароль
+                    </span>
+
+                    <input
+                        type="password"
+                        name="password"
+                        minlength="8"
+                        autocomplete="new-password"
+                        required
+                    >
+
+                </label>
+
+                <label>
+
+                    <span>
+                        Повторите пароль
+                    </span>
+
+                    <input
+                        type="password"
+                        name="password_confirm"
+                        minlength="8"
+                        autocomplete="new-password"
+                        required
+                    >
+
+                </label>
+
+                <button
+                    class="button button-primary button-wide"
+                    type="submit"
+                >
+                    Создать аккаунт
+                </button>
+
+            </form>
+
+            <p class="auth-switch">
+
+                Уже зарегистрированы?
+
+                <a href="{{ url_for('auth.login') }}">
+                    Войти
+                </a>
+
+            </p>
+
+        </div>
+
+    </section>
+
+</main>
+
+{% endblock %}

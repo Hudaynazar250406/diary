@@ -4,10 +4,14 @@ from app.models.study_plan import StudyPlan
 from app.models.group import Group
 from app.models.discipline import Discipline
 
+from app.models.user import User
+from app.permissions import role_required
+
 study_plans_bp = Blueprint("study_plans", __name__)
 
 
 @study_plans_bp.route("/study_plans", methods=["GET"])
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def get_study_plans():
     """Получение списка всех учебных планов."""
     plans = StudyPlan.query.all()
@@ -15,6 +19,7 @@ def get_study_plans():
 
 
 @study_plans_bp.route("/study_plans/<int:plan_id>", methods=["GET"])
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def get_study_plan(plan_id):
     """Получение учебного плана по ID."""
     plan = db.session.get(StudyPlan, plan_id)
@@ -24,6 +29,7 @@ def get_study_plan(plan_id):
 
 
 @study_plans_bp.route("/study_plans", methods=["POST"])
+@role_required(User.ROLE_ADMIN)
 def create_study_plan():
     """Создание нового учебного плана с проверкой группы и дисциплины."""
     data = request.get_json(silent=True)
@@ -58,6 +64,7 @@ def create_study_plan():
 
 
 @study_plans_bp.route("/study_plans/<int:plan_id>", methods=["PUT"])
+@role_required(User.ROLE_ADMIN)
 def update_study_plan(plan_id):
     """Обновление учебного плана."""
     plan = db.session.get(StudyPlan, plan_id)
@@ -90,6 +97,7 @@ def update_study_plan(plan_id):
 
 
 @study_plans_bp.route("/study_plans/<int:plan_id>", methods=["DELETE"])
+@role_required(User.ROLE_ADMIN)
 def delete_study_plan(plan_id):
     """Удаление учебного плана."""
     plan = db.session.get(StudyPlan, plan_id)
