@@ -1,13 +1,13 @@
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
 
 
 class Config:
-    """Конфигурация приложения читается из переменных окружения (.env)."""
+    """Базовая конфигурация приложения."""
 
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///studenttrack.db")
+    SQLALCHEMY_DATABASE_URI = os.getenv(
+        "DATABASE_URL",
+        "postgresql://studenttrack:studenttrack@localhost:5432/studenttrack",
+    )
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
     SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")

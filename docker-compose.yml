@@ -1,0 +1,36 @@
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: studenttrack_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: studenttrack
+      POSTGRES_PASSWORD: studenttrack
+      POSTGRES_DB: studenttrack
+    ports:
+      - "5432:5432"
+    volumes:
+      - studenttrack_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U studenttrack -d studenttrack"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    container_name: studenttrack_web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://studenttrack:studenttrack@db:5432/studenttrack
+      SECRET_KEY: dev-secret-change-me
+      APP_PORT: 5000
+      FLASK_ENV: development
+    ports:
+      - "5000:5000"
+
+volumes:
+  studenttrack_pgdata:
