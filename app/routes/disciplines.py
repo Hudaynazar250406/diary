@@ -2,10 +2,14 @@ from flask import Blueprint, request, jsonify, abort
 from app.extensions import db
 from app.models.discipline import Discipline
 
+from app.models.user import User
+from app.permissions import role_required
+
 disciplines_bp = Blueprint("disciplines", __name__)
 
 
 @disciplines_bp.route("/disciplines", methods=["GET"])
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def get_disciplines():
     """Список всех дисциплин."""
     disciplines = Discipline.query.all()
@@ -13,6 +17,7 @@ def get_disciplines():
 
 
 @disciplines_bp.route("/disciplines/<int:discipline_id>", methods=["GET"])
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def get_discipline(discipline_id):
     """Получение дисциплины по ID."""
     discipline = db.session.get(Discipline, discipline_id)
@@ -22,6 +27,7 @@ def get_discipline(discipline_id):
 
 
 @disciplines_bp.route("/disciplines", methods=["POST"])
+@role_required(User.ROLE_ADMIN)
 def create_discipline():
     """Создание новой дисциплины."""
     data = request.get_json(silent=True)
@@ -40,6 +46,7 @@ def create_discipline():
 
 
 @disciplines_bp.route("/disciplines/<int:discipline_id>", methods=["PUT"])
+@role_required(User.ROLE_ADMIN)
 def update_discipline(discipline_id):
     """Обновление дисциплины."""
     discipline = db.session.get(Discipline, discipline_id)
@@ -60,6 +67,7 @@ def update_discipline(discipline_id):
 
 
 @disciplines_bp.route("/disciplines/<int:discipline_id>", methods=["DELETE"])
+@role_required(User.ROLE_ADMIN)
 def delete_discipline(discipline_id):
     """Удаление дисциплины."""
     discipline = db.session.get(Discipline, discipline_id)

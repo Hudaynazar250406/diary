@@ -6,6 +6,8 @@ from app.models.student import Student
 from app.models.discipline import Discipline
 from app.models.study_plan import StudyPlan
 
+from app.models.user import User
+from app.permissions import role_required
 
 grades_bp = Blueprint("grades", __name__)
 
@@ -47,6 +49,7 @@ def validate_study_plan(student, discipline_id):
 
 
 @grades_bp.route("/grades", methods=["GET"])
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def get_grades():
     # Получение списка всех оценок
     grades = Grade.query.all()
@@ -54,6 +57,7 @@ def get_grades():
 
 
 @grades_bp.route("/grades/<int:grade_id>", methods=["GET"])
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def get_grade(grade_id):
     # Получение оценки по ID
     grade = db.session.get(Grade, grade_id)
@@ -65,6 +69,7 @@ def get_grade(grade_id):
 
 
 @grades_bp.route("/grades", methods=["POST"])
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def create_grade():
     # Создание новой оценки
     data = request.get_json(silent=True)
@@ -98,6 +103,7 @@ def create_grade():
 
 
 @grades_bp.route("/grades/<int:grade_id>", methods=["PUT"])
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def update_grade(grade_id):
     # Обновление существующей оценки
     grade = db.session.get(Grade, grade_id)
@@ -131,6 +137,7 @@ def update_grade(grade_id):
 
 
 @grades_bp.route("/grades/<int:grade_id>", methods=["DELETE"])
+@role_required(User.ROLE_TEACHER, User.ROLE_ADMIN)
 def delete_grade(grade_id):
     # Удаление оценки
     grade = db.session.get(Grade, grade_id)

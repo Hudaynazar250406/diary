@@ -1,0 +1,1231 @@
+{% extends "base.html" %}
+
+{% block title %}Панель управления — StudentTrack{% endblock %}
+
+{% block body %}
+
+<div
+    id="dashboard-app"
+    data-role="{{ g.user.role }}"
+>
+
+    <div class="dashboard-layout">
+
+        <aside class="sidebar">
+
+            <div class="sidebar-brand">
+
+                <div class="brand-mark">
+                    ST
+                </div>
+
+                <div>
+                    <strong>StudentTrack</strong>
+                    <span>Учебный журнал</span>
+                </div>
+
+            </div>
+
+            <nav class="sidebar-nav">
+
+                <button
+                    class="nav-button active"
+                    type="button"
+                    data-section="overview"
+                >
+                    Обзор
+                </button>
+
+
+                {% if g.user.role in ["teacher", "admin"] %}
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="groups"
+                    >
+                        Группы
+                    </button>
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="students"
+                    >
+                        Студенты
+                    </button>
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="disciplines"
+                    >
+                        Дисциплины
+                    </button>
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="plans"
+                    >
+                        Учебные планы
+                    </button>
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="schedule"
+                    >
+                        Расписание
+                    </button>
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="grades"
+                    >
+                        Оценки
+                    </button>
+
+                {% endif %}
+
+
+                {% if g.user.role == "student" %}
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="my-disciplines"
+                    >
+                        Мои дисциплины
+                    </button>
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="my-schedule"
+                    >
+                        Моё расписание
+                    </button>
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="my-grades"
+                    >
+                        Мои оценки
+                    </button>
+
+                {% endif %}
+
+
+                {% if g.user.role == "admin" %}
+
+                    <button
+                        class="nav-button"
+                        type="button"
+                        data-section="users"
+                    >
+                        Пользователи
+                    </button>
+
+                {% endif %}
+
+            </nav>
+
+            <div class="sidebar-user">
+
+                <div>
+                    <span>Пользователь</span>
+                    <strong>{{ g.user.username }}</strong>
+                </div>
+
+                <form
+                    action="{{ url_for('auth.logout') }}"
+                    method="post"
+                >
+
+                    <button
+                        class="button button-secondary button-wide"
+                        type="submit"
+                    >
+                        Выйти
+                    </button>
+
+                </form>
+
+            </div>
+
+        </aside>
+
+
+        <main class="dashboard-main">
+
+            <header class="dashboard-header">
+
+                <div>
+                    <p class="eyebrow">StudentTrack</p>
+                    <h1 id="page-title">Обзор</h1>
+                </div>
+
+                <button
+                    id="refresh-button"
+                    class="button button-secondary"
+                    type="button"
+                >
+                    Обновить данные
+                </button>
+
+            </header>
+
+
+            <div
+                id="dashboard-message"
+                class="dashboard-message"
+                hidden
+            ></div>
+
+
+            <section
+                id="section-overview"
+                class="dashboard-section"
+            >
+
+                {% if g.user.role in ["teacher", "admin"] %}
+                <div class="stats-grid">
+
+                    <article class="stat-card">
+                        <span>Группы</span>
+                        <strong id="groups-count">0</strong>
+                    </article>
+
+                    <article class="stat-card">
+                        <span>Студенты</span>
+                        <strong id="students-count">0</strong>
+                    </article>
+
+                    <article class="stat-card">
+                        <span>Дисциплины</span>
+                        <strong id="disciplines-count">0</strong>
+                    </article>
+
+                    <article class="stat-card">
+                        <span>Учебные планы</span>
+                        <strong id="plans-count">0</strong>
+                    </article> 
+
+                    <article class="stat-card">
+                        <span>Оценки</span>
+                        <strong id="grades-count">0</strong>
+                    </article>
+
+                </div>
+                {% endif %}
+
+                
+
+
+                <div class="content-card welcome-card">
+
+                    <p class="eyebrow">
+                        Панель управления
+                    </p>
+
+                    <h2>
+                        Добро пожаловать, {{ g.user.username }}
+                    </h2>
+
+                    <p>
+                        Выберите раздел слева, чтобы просматривать
+                        и изменять данные учебного журнала.
+                    </p>
+
+                </div>
+
+            </section>
+
+
+            <section
+                id="section-groups"
+                class="dashboard-section"
+                hidden
+            >
+
+                <div class="crud-grid">
+                    {% if g.user.role == "admin" %}
+                    <article class="content-card form-card">
+
+                        <h2 id="group-form-title">
+                            Добавить группу
+                        </h2>
+
+                        <form
+                            id="group-form"
+                            class="form-stack"
+                        >
+
+                            <input
+                                id="group-edit-id"
+                                type="hidden"
+                            >
+
+                            <label>
+
+                                <span>
+                                    Название группы
+                                </span>
+
+                                <input
+                                    id="group-name"
+                                    type="text"
+                                    maxlength="50"
+                                    placeholder="Например, БИСТ-241"
+                                    required
+                                >
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Год
+                                </span>
+
+                                <input
+                                    id="group-year"
+                                    type="number"
+                                    min="1"
+                                    placeholder="2026"
+                                    required
+                                >
+
+                            </label>
+
+                            <div class="form-actions">
+
+                                <button
+                                    class="button button-primary"
+                                    type="submit"
+                                >
+                                    Сохранить
+                                </button>
+
+                                <button
+                                    id="group-cancel"
+                                    class="button button-secondary"
+                                    type="button"
+                                    hidden
+                                >
+                                    Отмена
+                                </button>
+
+                            </div>
+
+                        </form>
+
+                    </article>
+                    {% endif %}
+
+
+                    <article class="content-card table-card">
+
+                        <div class="card-heading">
+                            <h2>Группы</h2>
+                        </div>
+
+                        <div class="table-wrap">
+
+                            <table>
+
+                                <thead>
+
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Название</th>
+                                        <th>Год</th>
+                                        <th>Действия</th>
+                                    </tr>
+
+                                </thead>
+
+                                <tbody id="groups-table-body"></tbody>
+
+                            </table>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+            </section>
+
+
+            <section
+                id="section-students"
+                class="dashboard-section"
+                hidden
+            >
+
+                <div class="crud-grid">
+                    {% if g.user.role == "admin" %}
+                    <article class="content-card form-card">
+
+                        <h2 id="student-form-title">
+                            Добавить студента
+                        </h2>
+
+                        <form
+                            id="student-form"
+                            class="form-stack"
+                        >
+
+                            <input
+                                id="student-edit-id"
+                                type="hidden"
+                            >
+
+                            <label>
+
+                                <span>
+                                    ФИО
+                                </span>
+
+                                <input
+                                    id="student-name"
+                                    type="text"
+                                    maxlength="100"
+                                    placeholder="Иванов Иван Иванович"
+                                    required
+                                >
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Email
+                                </span>
+
+                                <input
+                                    id="student-email"
+                                    type="email"
+                                    maxlength="120"
+                                    placeholder="student@example.com"
+                                >
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Группа
+                                </span>
+
+                                <select
+                                    id="student-group-id"
+                                    required
+                                ></select>
+
+                            </label>
+
+                            <div class="form-actions">
+
+                                <button
+                                    class="button button-primary"
+                                    type="submit"
+                                >
+                                    Сохранить
+                                </button>
+
+                                <button
+                                    id="student-cancel"
+                                    class="button button-secondary"
+                                    type="button"
+                                    hidden
+                                >
+                                    Отмена
+                                </button>
+
+                            </div>
+
+                        </form>
+
+                    </article>
+
+                    {% endif %}
+
+
+                    <article class="content-card table-card">
+
+                        <div class="card-heading">
+                            <h2>Студенты</h2>
+                        </div>
+
+                        <div class="table-wrap">
+
+                            <table>
+
+                                <thead>
+
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>ФИО</th>
+                                        <th>Email</th>
+                                        <th>Группа</th>
+                                        <th>Действия</th>
+                                    </tr>
+
+                                </thead>
+
+                                <tbody id="students-table-body"></tbody>
+
+                            </table>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+            </section>
+
+
+            <section
+                id="section-disciplines"
+                class="dashboard-section"
+                hidden
+            >
+
+                <div class="crud-grid">
+
+                    {% if g.user.role == "admin" %}
+                    <article class="content-card form-card">
+
+                        <h2 id="discipline-form-title">
+                            Добавить дисциплину
+                        </h2>
+
+                        <form
+                            id="discipline-form"
+                            class="form-stack"
+                        >
+
+                            <input
+                                id="discipline-edit-id"
+                                type="hidden"
+                            >
+
+                            <label>
+
+                                <span>
+                                    Название дисциплины
+                                </span>
+
+                                <input
+                                    id="discipline-name"
+                                    type="text"
+                                    maxlength="150"
+                                    placeholder="Информационная безопасность"
+                                    required
+                                >
+
+                            </label>
+
+                            <div class="form-actions">
+
+                                <button
+                                    class="button button-primary"
+                                    type="submit"
+                                >
+                                    Сохранить
+                                </button>
+
+                                <button
+                                    id="discipline-cancel"
+                                    class="button button-secondary"
+                                    type="button"
+                                    hidden
+                                >
+                                    Отмена
+                                </button>
+
+                            </div>
+
+                        </form>
+
+                    </article>
+                    {% endif %}
+
+
+                    <article class="content-card table-card">
+
+                        <div class="card-heading">
+                            <h2>Дисциплины</h2>
+                        </div>
+
+                        <div class="table-wrap">
+
+                            <table>
+
+                                <thead>
+
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Название</th>
+                                        <th>Действия</th>
+                                    </tr>
+
+                                </thead>
+
+                                <tbody id="disciplines-table-body"></tbody>
+
+                            </table>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+            </section>
+
+
+            <section
+                id="section-plans"
+                class="dashboard-section"
+                hidden
+            >
+
+                <div class="crud-grid">
+
+                    {% if g.user.role == "admin" %}
+                    <article class="content-card form-card">
+
+                        <h2 id="plan-form-title">
+                            Добавить учебный план
+                        </h2>
+
+                        <form
+                            id="plan-form"
+                            class="form-stack"
+                        >
+
+                            <input
+                                id="plan-edit-id"
+                                type="hidden"
+                            >
+
+                            <label>
+
+                                <span>
+                                    Группа
+                                </span>
+
+                                <select
+                                    id="plan-group-id"
+                                    required
+                                ></select>
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Дисциплина
+                                </span>
+
+                                <select
+                                    id="plan-discipline-id"
+                                    required
+                                ></select>
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Семестр
+                                </span>
+
+                                <input
+                                    id="plan-semester"
+                                    type="number"
+                                    min="1"
+                                    placeholder="1"
+                                    required
+                                >
+
+                            </label>
+
+                            <div class="form-actions">
+
+                                <button
+                                    class="button button-primary"
+                                    type="submit"
+                                >
+                                    Сохранить
+                                </button>
+
+                                <button
+                                    id="plan-cancel"
+                                    class="button button-secondary"
+                                    type="button"
+                                    hidden
+                                >
+                                    Отмена
+                                </button>
+
+                            </div>
+
+                        </form>
+
+                    </article>
+                    {% endif %}
+
+
+                    <article class="content-card table-card">
+
+                        <div class="card-heading">
+                            <h2>Учебные планы</h2>
+                        </div>
+
+                        <div class="table-wrap">
+
+                            <table>
+
+                                <thead>
+
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Группа</th>
+                                        <th>Дисциплина</th>
+                                        <th>Семестр</th>
+                                        <th>Действия</th>
+                                    </tr>
+
+                                </thead>
+
+                                <tbody id="plans-table-body"></tbody>
+
+                            </table>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+            </section>
+
+            {% if g.user.role in ["teacher", "admin"] %}
+
+            <section
+                id="section-schedule"
+                class="dashboard-section"
+                hidden
+            >
+
+                <div class="crud-grid">
+
+                    <article class="content-card form-card">
+
+                        <h2 id="schedule-form-title">
+                            Добавить занятие
+                        </h2>
+
+                        <form
+                            id="schedule-form"
+                            class="form-stack"
+                        >
+
+                            <input
+                                id="schedule-edit-id"
+                                type="hidden"
+                            >
+
+                            <label>
+
+                                <span>
+                                    Группа
+                                </span>
+
+                                <select
+                                    id="schedule-group-id"
+                                    required
+                                ></select>
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Дисциплина
+                                </span>
+
+                                <select
+                                    id="schedule-discipline-id"
+                                    required
+                                ></select>
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    День недели
+                                </span>
+
+                                <select
+                                    id="schedule-weekday"
+                                    required
+                                >
+
+                                    <option value="">
+                                        Выберите день
+                                    </option>
+
+                                    <option value="1">
+                                        Понедельник
+                                    </option>
+
+                                    <option value="2">
+                                        Вторник
+                                    </option>
+
+                                    <option value="3">
+                                        Среда
+                                    </option>
+
+                                    <option value="4">
+                                        Четверг
+                                    </option>
+
+                                    <option value="5">
+                                        Пятница
+                                    </option>
+
+                                    <option value="6">
+                                        Суббота
+                                    </option>
+
+                                    <option value="7">
+                                        Воскресенье
+                                    </option>
+
+                                </select>
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Начало
+                                </span>
+
+                                <input
+                                    id="schedule-start-time"
+                                    type="time"
+                                    required
+                                >
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Окончание
+                                </span>
+
+                                <input
+                                    id="schedule-end-time"
+                                    type="time"
+                                    required
+                                >
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Аудитория
+                                </span>
+
+                                <input
+                                    id="schedule-room"
+                                    type="text"
+                                    maxlength="50"
+                                    placeholder="Например, 401"
+                                >
+
+                            </label>
+
+                            <div class="form-actions">
+
+                                <button
+                                    class="button button-primary"
+                                    type="submit"
+                                >
+                                    Сохранить
+                                </button>
+
+                                <button
+                                    id="schedule-cancel"
+                                    class="button button-secondary"
+                                    type="button"
+                                    hidden
+                                >
+                                    Отмена
+                                </button>
+
+                            </div>
+
+                        </form>
+
+                    </article>
+
+
+                    <article class="content-card table-card">
+
+                        <div class="card-heading">
+                            <h2>Расписание</h2>
+                        </div>
+
+                        <div class="table-wrap">
+
+                            <table>
+
+                                <thead>
+
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Группа</th>
+                                        <th>День</th>
+                                        <th>Время</th>
+                                        <th>Дисциплина</th>
+                                        <th>Аудитория</th>
+                                        <th>Действия</th>
+                                    </tr>
+
+                                </thead>
+
+                                <tbody id="schedule-table-body"></tbody>
+
+                            </table>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+            </section>
+
+            {% endif %}
+
+
+            <section
+                id="section-grades"
+                class="dashboard-section"
+                hidden
+            >
+
+                <div class="crud-grid">
+
+                    {% if g.user.role in ["teacher", "admin"] %}
+                    <article class="content-card form-card">
+
+                        <h2 id="grade-form-title">
+                            Добавить оценку
+                        </h2>
+
+                        <form
+                            id="grade-form"
+                            class="form-stack"
+                        >
+
+                            <input
+                                id="grade-edit-id"
+                                type="hidden"
+                            >
+
+                            <label>
+
+                                <span>
+                                    Студент
+                                </span>
+
+                                <select
+                                    id="grade-student-id"
+                                    required
+                                ></select>
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Дисциплина
+                                </span>
+
+                                <select
+                                    id="grade-discipline-id"
+                                    required
+                                ></select>
+
+                            </label>
+
+                            <label>
+
+                                <span>
+                                    Оценка
+                                </span>
+
+                                <select
+                                    id="grade-value"
+                                    required
+                                >
+
+                                    <option value="">
+                                        Выберите оценку
+                                    </option>
+
+                                    <option value="1">1</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+
+                                </select>
+
+                            </label>
+
+                            <div class="form-actions">
+
+                                <button
+                                    class="button button-primary"
+                                    type="submit"
+                                >
+                                    Сохранить
+                                </button>
+
+                                <button
+                                    id="grade-cancel"
+                                    class="button button-secondary"
+                                    type="button"
+                                    hidden
+                                >
+                                    Отмена
+                                </button>
+
+                            </div>
+
+                        </form>
+
+                    </article>
+                    {% endif %}
+
+
+                    <article class="content-card table-card">
+
+                        <div class="card-heading">
+                            <h2>Оценки</h2>
+                        </div>
+
+                        <div class="table-wrap">
+
+                            <table>
+
+                                <thead>
+
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Студент</th>
+                                        <th>Дисциплина</th>
+                                        <th>Оценка</th>
+                                        <th>Дата</th>
+                                        <th>Действия</th>
+                                    </tr>
+
+                                </thead>
+
+                                <tbody id="grades-table-body"></tbody>
+
+                            </table>
+
+                        </div>
+
+                    </article>
+
+                </div>
+
+            </section>
+
+            {% if g.user.role == "admin" %}
+
+            <section
+                id="section-users"
+                class="dashboard-section"
+                hidden
+            >
+
+                <article class="content-card table-card">
+
+                    <div class="card-heading">
+                        <h2>Пользователи</h2>
+                    </div>
+
+                    <div class="table-wrap">
+
+                        <table>
+
+                            <thead>
+
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Логин</th>
+                                    <th>Email</th>
+                                    <th>Роль</th>
+                                    <th>Студент</th>
+                                    <th>Действия</th>
+                                </tr>
+
+                            </thead>
+
+                            <tbody id="users-table-body"></tbody>
+
+                        </table>
+
+                    </div>
+
+                </article>
+
+            </section>
+
+            {% endif %}
+
+            {% if g.user.role == "student" %}
+
+            <section
+                id="section-my-disciplines"
+                class="dashboard-section"
+                hidden
+            >
+
+                <article class="content-card table-card">
+
+                    <div class="card-heading">
+                        <h2>Мои дисциплины</h2>
+                    </div>
+
+                    <div class="table-wrap">
+
+                        <table>
+
+                            <thead>
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Дисциплина</th>
+                                    <th>Семестр</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="my-disciplines-table-body"></tbody>
+
+                        </table>
+
+                    </div>
+
+                </article>
+
+            </section>
+
+            {% endif %}
+
+            {% if g.user.role == "student" %}
+
+            <section
+                id="section-my-schedule"
+                class="dashboard-section"
+                hidden
+            >
+
+                <article class="content-card table-card">
+
+                    <div class="card-heading">
+                        <h2>Моё расписание</h2>
+                    </div>
+
+                    <div class="table-wrap">
+
+                        <table>
+
+                            <thead>
+                                <tr>
+                                    <th>День</th>
+                                    <th>Время</th>
+                                    <th>Дисциплина</th>
+                                    <th>Аудитория</th>
+                                </tr>
+                            </thead>
+
+                            <tbody id="my-schedule-table-body"></tbody>
+
+                        </table>
+
+                    </div>
+
+                </article>
+
+            </section>
+
+            {% endif %}
+
+            {% if g.user.role == "student" %}
+
+            <section
+                id="section-my-grades"
+                class="dashboard-section"
+                hidden
+            >
+
+                <article class="content-card table-card">
+
+                    <div class="card-heading">
+                        <h2>Мои оценки</h2>
+                    </div>
+
+                    <div class="table-wrap">
+
+                        <table>
+
+                            <thead>
+
+                                <tr>
+                                    <th>ID</th>
+                                    <th>Дисциплина</th>
+                                    <th>Оценка</th>
+                                    <th>Дата</th>
+                                </tr>
+
+                            </thead>
+
+                            <tbody id="my-grades-table-body"></tbody>
+
+                        </table>
+
+                    </div>
+
+                </article>
+
+            </section>
+
+            {% endif %}
+
+        </main>
+
+    </div>
+</div>
+<script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+
+{% endblock %}

@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Вход — StudentTrack{% endblock %}
+
+{% block body %}
+
+<main class="auth-shell">
+
+    <section class="auth-brand">
+
+        <div class="brand-mark">
+            ST
+        </div>
+
+        <p class="eyebrow">
+            StudentTrack
+        </p>
+
+        <h1>
+            Успеваемость без таблиц и хаоса.
+        </h1>
+
+        <p class="auth-lead">
+            Единое пространство для групп, студентов,
+            дисциплин, учебных планов и оценок.
+        </p>
+
+    </section>
+
+    <section class="auth-panel">
+
+        <div class="auth-card">
+
+            <p class="eyebrow">
+                С возвращением
+            </p>
+
+            <h2>
+                Войти в аккаунт
+            </h2>
+
+            <p class="muted">
+                Используйте имя пользователя или email.
+            </p>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+
+                {% for category, message in messages %}
+
+                    <div class="alert alert-{{ category }}">
+                        {{ message }}
+                    </div>
+
+                {% endfor %}
+
+            {% endwith %}
+
+            <form
+                method="post"
+                class="form-stack"
+            >
+
+                <label>
+
+                    <span>
+                        Логин или email
+                    </span>
+
+                    <input
+                        name="identifier"
+                        autocomplete="username"
+                        required
+                        autofocus
+                    >
+
+                </label>
+
+                <label>
+
+                    <span>
+                        Пароль
+                    </span>
+
+                    <input
+                        type="password"
+                        name="password"
+                        autocomplete="current-password"
+                        required
+                    >
+
+                </label>
+
+                <button
+                    class="button button-primary button-wide"
+                    type="submit"
+                >
+                    Войти
+                </button>
+
+            </form>
+
+            <p class="auth-switch">
+
+                Нет аккаунта?
+
+                <a href="{{ url_for('auth.register') }}">
+                    Зарегистрироваться
+                </a>
+
+            </p>
+
+        </div>
+
+    </section>
+
+</main>
+
+{% endblock %}
