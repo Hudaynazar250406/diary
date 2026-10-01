@@ -1,51 +1,51 @@
 # StudentTrack
 
-StudentTrack - учебное Flask-приложение для учета успеваемости студентов.
+StudentTrack — веб-приложение на Flask для учёта успеваемости, расписания и управления пользователями учебного заведения.
 
-Система предназначена для хранения информации о студентах, учебных группах, дисциплинах, учебных планах и оценках.
+Система хранит информацию о студентах, учебных группах, дисциплинах, учебных планах, оценках, расписании занятий, а также реализует регистрацию, авторизацию и разграничение прав доступа по ролям через веб-интерфейс и HTTP API.
 
 ## Возможности
 
-На текущем этапе реализуются:
-
-- работа с учебными группами;
-- работа со студентами;
-- управление дисциплинами;
-- управление учебными планами;
-- управление оценками;
-- проверка принадлежности дисциплины учебному плану группы;
-- проверка диапазона оценок;
-- HTTP API;
-- обработка ошибок;
+- работа с учебными группами, студентами, дисциплинами и учебными планами (CRUD);
+- управление оценками с проверкой принадлежности дисциплины учебному плану группы и диапазона оценки (1–5);
+- управление расписанием занятий с проверкой пересечений по времени, дню недели и учебному плану группы;
+- регистрация и авторизация пользователей (по username или email), безопасное хеширование паролей;
+- ролевая модель доступа: `student`, `teacher`, `admin`;
+- личный кабинет студента: свои дисциплины, расписание, оценки;
+- административная панель управления пользователями и назначением ролей;
+- веб-интерфейс (dashboard) на Flask/Jinja2 с динамическим обновлением данных через JavaScript;
+- HTTP API в формате JSON;
+- единый формат обработки ошибок;
 - health-check приложения;
-- хранение данных в SQLite;
-- автоматические тесты;
-- статический анализ кода с помощью Flake8.
+- хранение данных в PostgreSQL;
+- контейнеризация через Docker и Docker Compose;
+- автоматические тесты (pytest) и статический анализ кода (flake8).
 
 ## Технологии
 
-Проект использует:
-
-- Python
+- Python 3.13
 - Flask
-- Flask-SQLAlchemy
-- SQLAlchemy
-- SQLite
+- Flask-SQLAlchemy / SQLAlchemy
+- PostgreSQL 16 (psycopg2-binary)
+- Werkzeug (хеширование паролей)
+- Marshmallow (валидация)
 - python-dotenv
-- pytest
-- Flake8
-- Git
-- GitHub
+- Jinja2, HTML/CSS, JavaScript (fetch API)
+- Docker, Docker Compose
+- pytest, pytest-cov, flake8
+- Git, GitHub (feature-branch workflow, Pull Request)
 
 ## Структура проекта
 
 ```text
-studenttrack/
+diary/
 |-- app/
 |   |-- __init__.py
 |   |-- config.py
+|   |-- commands.py
 |   |-- errors.py
 |   |-- extensions.py
+|   |-- permissions.py
 |   |
 |   |-- models/
 |   |   |-- __init__.py
@@ -53,7 +53,9 @@ studenttrack/
 |   |   |-- student.py
 |   |   |-- discipline.py
 |   |   |-- study_plan.py
-|   |   \-- grade.py
+|   |   |-- grade.py
+|   |   |-- schedule.py
+|   |   \-- user.py
 |   |
 |   |-- routes/
 |   |   |-- __init__.py
@@ -62,10 +64,24 @@ studenttrack/
 |   |   |-- students.py
 |   |   |-- disciplines.py
 |   |   |-- study_plans.py
-|   |   \-- grades.py
+|   |   |-- grades.py
+|   |   |-- schedules.py
+|   |   |-- auth.py
+|   |   |-- me.py
+|   |   |-- admin.py
+|   |   \-- web.py
 |   |
 |   |-- schemas/
-|   \-- services/
+|   |-- services/
+|   |-- static/
+|   |   |-- css/style.css
+|   |   \-- js/dashboard.js
+|   |
+|   \-- templates/
+|       |-- base.html
+|       |-- login.html
+|       |-- register.html
+|       \-- dashboard.html
 |
 |-- tests/
 |   |-- conftest.py
@@ -74,7 +90,13 @@ studenttrack/
 |   |-- test_students.py
 |   |-- test_disciplines.py
 |   |-- test_study_plans.py
-|   \-- test_grades.py
+|   |-- test_grades.py
+|   |-- test_schedules.py
+|   |-- test_auth.py
+|   |-- test_permissions.py
+|   |-- test_admin.py
+|   |-- test_commands.py
+|   \-- test_me.py
 |
 |-- docs/
 |   |-- api.md
@@ -83,7 +105,8 @@ studenttrack/
 |-- instance/
 |-- .env.example
 |-- .gitignore
-|-- .flake8
+|-- Dockerfile
+|-- docker-compose.yml
 |-- Makefile
 |-- requirements.txt
 |-- run.py
@@ -102,19 +125,25 @@ cd diary
 Создать виртуальное окружение:
 
 ```bash
-python -m venv .venv
+python -m venv venv
 ```
 
 ### Windows PowerShell
 
 ```powershell
-.venv\Scripts\Activate.ps1
+venv\Scripts\Activate.ps1
 ```
 
-### Git Bash
+Если PowerShell блокирует выполнение скриптов, один раз выполните:
+
+```powershell
+Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+```
+
+### Git Bash / Linux / macOS
 
 ```bash
-source .venv/Scripts/activate
+source venv/bin/activate
 ```
 
 Установить зависимости:
@@ -123,17 +152,44 @@ source .venv/Scripts/activate
 pip install -r requirements.txt
 ```
 
+## База данных
+
+Проект использует **PostgreSQL 16** в качестве основной СУБД.
+
+SQLite не используется для запуска приложения: при конкурентной записи нескольких пользователей одновременно (администратор, преподаватели, студенты) SQLite допускает только одну активную пишущую транзакцию и блокирует базу целиком, что приводит к ошибкам `database is locked`. PostgreSQL использует MVCC и построчные блокировки, обеспечивая корректную параллельную запись. Исключение — автоматические тесты, которые продолжают использовать изолированную временную SQLite-базу для быстрого прогона (см. раздел «Тестирование»).
+
+### Вариант 1. Через Docker (рекомендуется)
+
+```bash
+docker compose up -d db
+```
+
+Подничт контейнер PostgreSQL 16 с базой `studenttrack`, пользователем `studenttrack` и паролем `studenttrack` на порте 5432.
+
+Полный запуск приложения и базы данных одной командой:
+
+```bash
+docker compose up --build
+```
+
+Приложение будет доступно на http://localhost:5000.
+
+### Вариант 2. Локальная установка PostgreSQL
+
+Установите PostgreSQL 16 (например, через `winget install --id=PostgreSQL.PostgreSQL.16 -e` на Windows) и создайте базу данных и пользователя:
+
+```sql
+CREATE USER studenttrack WITH PASSWORD 'studenttrack';
+CREATE DATABASE studenttrack OWNER studenttrack;
+```
+
 ## Переменные окружения
 
-Создайте файл `.env` на основе `.env.example`.
-
-Для PowerShell:
+Создайте файл `.env` на основе `.env.example`:
 
 ```powershell
 Copy-Item .env.example .env
 ```
-
-Для Git Bash:
 
 ```bash
 cp .env.example .env
@@ -142,34 +198,49 @@ cp .env.example .env
 Пример конфигурации:
 
 ```env
-DATABASE_URL=sqlite:///studenttrack.db
+DATABASE_URL=postgresql://studenttrack:studenttrack@localhost:5432/studenttrack
+SECRET_KEY=replace-with-a-long-random-secret
+APP_PORT=5000
+FLASK_ENV=development
 ```
 
 Файл `.env` содержит локальную конфигурацию и не должен добавляться в Git.
 
 ## Запуск приложения
 
-Запустить приложение можно командой:
+При первом запуске таблицы создаются автоматически (`db.create_all()` внутри `create_app`).
 
 ```bash
 python run.py
 ```
 
-После запуска API будет доступно по адресу:
+После запуска приложение доступно по адресу:
 
 ```text
 http://127.0.0.1:5000
 ```
 
-## Проверка работоспособности
+### Создание администратора
 
-Для проверки состояния приложения используется endpoint:
+Для доступа к панели администратора создайте учётную запись через CLI-команду:
+
+```bash
+flask --app run create-admin <username> <email>
+```
+
+Команда запросит пароль (минимум 8 символов). Роль `admin` можно назначить только через CLI — это ограничение реализовано намеренно, назначить её через веб-API нельзя.
+
+Изменить роль существующего пользователя (`student` или `teacher`):
+
+```bash
+flask --app run set-role <username> <role>
+```
+
+## Проверка работоспособности
 
 ```text
 GET /health
 ```
-
-Пример запроса:
 
 ```bash
 curl http://127.0.0.1:5000/health
@@ -183,11 +254,24 @@ curl http://127.0.0.1:5000/health
 }
 ```
 
-HTTP-код ответа:
+## Роли и разграничение доступа
 
-```text
-200 OK
-```
+| Роль | Права доступа |
+|---|---|
+| `student` | Доступ только к собственным данным через `/me/*` (свои дисциплины, расписание, оценки). |
+| `teacher` | Просмотр групп, студентов, дисциплин, учебных планов; создание/изменение/удаление оценок и расписания. |
+| `admin` | Полный доступ ко всем сущностям; управление пользователями (роли, привязка студента). Назначается только через CLI. |
+
+Доступ на уровне маршрутов контролируется декораторами `login_required` и `role_required` (`app/permissions.py`).
+
+## Веб-интерфейс
+
+- `GET /register`, `POST /register` — регистрация (новый пользователь получает роль `student`);
+- `GET /login`, `POST /login` — вход по username или email;
+- `POST /logout` — выход;
+- `GET /dashboard` — панель управления с разделами в зависимости от роли: обзор, группы, студенты, дисциплины, учебные планы, расписание, оценки, пользователи (для `admin`), либо личные разделы для `student` (мои дисциплины / моё расписание / мои оценки).
+
+Веб-интерфейс обращается к тому же HTTP API через JavaScript `fetch()` — отдельного front-end сервера не требуется.
 
 ## API
 
@@ -197,59 +281,90 @@ HTTP-код ответа:
 |---|---|---|
 | GET | `/health` | Проверка работоспособности приложения |
 
-### Учебные группы
+### Аутентификация
 
 | Метод | URL | Описание |
 |---|---|---|
-| GET | `/groups` | Получить список групп |
-| GET | `/groups/<id>` | Получить группу по ID |
-| POST | `/groups` | Создать группу |
-| PUT | `/groups/<id>` | Изменить группу |
-| DELETE | `/groups/<id>` | Удалить группу |
+| GET/POST | `/register` | Регистрация пользователя |
+| GET/POST | `/login` | Вход по username или email |
+| POST | `/logout` | Выход из системы |
+
+### Учебные группы
+
+| Метод | URL | Описание | Доступ |
+|---|---|---|---|
+| GET | `/groups` | Список групп | teacher, admin |
+| GET | `/groups/<id>` | Группа по ID | teacher, admin |
+| POST | `/groups` | Создать группу | admin |
+| PUT | `/groups/<id>` | Изменить группу | admin |
+| DELETE | `/groups/<id>` | Удалить группу | admin |
 
 ### Студенты
 
-| Метод | URL | Описание |
-|---|---|---|
-| GET | `/students` | Получить список студентов |
-| GET | `/students/<id>` | Получить студента по ID |
-| POST | `/students` | Создать студента |
-| PUT | `/students/<id>` | Изменить студента |
-| DELETE | `/students/<id>` | Удалить студента |
+| Метод | URL | Описание | Доступ |
+|---|---|---|---|
+| GET | `/students` | Список студентов (фильтр по `group_id`) | teacher, admin |
+| GET | `/students/<id>` | Студент по ID | teacher, admin |
+| POST | `/students` | Создать студента | admin |
+| PUT | `/students/<id>` | Изменить студента | admin |
+| DELETE | `/students/<id>` | Удалить студента | admin |
 
 ### Дисциплины
 
-| Метод | URL | Описание |
-|---|---|---|
-| GET | `/disciplines` | Получить список дисциплин |
-| GET | `/disciplines/<id>` | Получить дисциплину по ID |
-| POST | `/disciplines` | Создать дисциплину |
-| PUT | `/disciplines/<id>` | Изменить дисциплину |
-| DELETE | `/disciplines/<id>` | Удалить дисциплину |
+| Метод | URL | Описание | Доступ |
+|---|---|---|---|
+| GET | `/disciplines` | Список дисциплин | teacher, admin |
+| GET | `/disciplines/<id>` | Дисциплина по ID | teacher, admin |
+| POST | `/disciplines` | Создать дисциплину | admin |
+| PUT | `/disciplines/<id>` | Изменить дисциплину | admin |
+| DELETE | `/disciplines/<id>` | Удалить дисциплину | admin |
 
 ### Учебные планы
 
-| Метод | URL | Описание |
-|---|---|---|
-| GET | `/study_plans` | Получить список учебных планов |
-| GET | `/study_plans/<id>` | Получить учебный план по ID |
-| POST | `/study_plans` | Создать учебный план |
-| PUT | `/study_plans/<id>` | Изменить учебный план |
-| DELETE | `/study_plans/<id>` | Удалить учебный план |
+| Метод | URL | Описание | Доступ |
+|---|---|---|---|
+| GET | `/study_plans` | Список учебных планов | teacher, admin |
+| GET | `/study_plans/<id>` | Учебный план по ID | teacher, admin |
+| POST | `/study_plans` | Создать учебный план | admin |
+| PUT | `/study_plans/<id>` | Изменить учебный план | admin |
+| DELETE | `/study_plans/<id>` | Удалить учебный план | admin |
 
 ### Оценки
 
-| Метод | URL | Описание |
-|---|---|---|
-| GET | `/grades` | Получить список оценок |
-| GET | `/grades/<id>` | Получить оценку по ID |
-| POST | `/grades` | Создать оценку |
-| PUT | `/grades/<id>` | Изменить оценку |
-| DELETE | `/grades/<id>` | Удалить оценку |
+| Метод | URL | Описание | Доступ |
+|---|---|---|---|
+| GET | `/grades` | Список оценок | teacher, admin |
+| GET | `/grades/<id>` | Оценка по ID | teacher, admin |
+| POST | `/grades` | Создать оценку | teacher, admin |
+| PUT | `/grades/<id>` | Изменить оценку | teacher, admin |
+| DELETE | `/grades/<id>` | Удалить оценку | teacher, admin |
+
+### Расписание
+
+| Метод | URL | Описание | Доступ |
+|---|---|---|---|
+| GET | `/schedules` | Список занятий | teacher, admin |
+| POST | `/schedules` | Создать занятие | teacher, admin |
+| PUT | `/schedules/<id>` | Изменить занятие | teacher, admin |
+| DELETE | `/schedules/<id>` | Удалить занятие | teacher, admin |
+
+### Личный кабинет студента
+
+| Метод | URL | Описание | Доступ |
+|---|---|---|---|
+| GET | `/me/disciplines` | Мои дисциплины | student |
+| GET | `/me/schedule` | Моё расписание | student |
+| GET | `/me/grades` | Мои оценки | student |
+
+### Администрирование пользователей
+
+| Метод | URL | Описание | Доступ |
+|---|---|---|---|
+| GET | `/admin/users` | Список пользователей | admin |
+| PUT | `/admin/users/<id>/role` | Назначить роль student/teacher | admin |
+| PUT | `/admin/users/<id>/student` | Привязать/отвязать студента | admin |
 
 ## Основные сущности
-
-В проекте используются следующие основные сущности:
 
 ```text
 Group
@@ -257,316 +372,129 @@ Student
 Discipline
 StudyPlan
 Grade
+Schedule
+User
 ```
 
 Основные связи:
 
 ```text
-Group 1:N Student
-
-Group 1:N StudyPlan
-
-Discipline 1:N StudyPlan
-
-Student 1:N Grade
-
-Discipline 1:N Grade
+Group        1:N  Student
+Group        1:N  StudyPlan
+Group        1:N  Schedule
+Discipline   1:N  StudyPlan
+Discipline   1:N  Grade
+Discipline   1:N  Schedule
+Student      1:N  Grade
+Student      1:1  User (через users.student_id)
 ```
 
 Связи внешних ключей:
 
 ```text
-groups.id -> students.group_id
-
-groups.id -> study_plans.group_id
-
-disciplines.id -> study_plans.discipline_id
-
-students.id -> grades.student_id
-
-disciplines.id -> grades.discipline_id
+groups.id       -> students.group_id
+groups.id       -> study_plans.group_id
+groups.id       -> schedules.group_id
+disciplines.id  -> study_plans.discipline_id
+disciplines.id  -> grades.discipline_id
+disciplines.id  -> schedules.discipline_id
+students.id     -> grades.student_id
+students.id     -> users.student_id (unique)
 ```
 
-Более подробное описание структуры базы данных находится в:
+Ограничения целостности на уровне БД:
 
-```text
-docs/schema.md
-```
+- `grades.grade` — CHECK, диапазон 1–5;
+- `schedules.weekday` — CHECK, диапазон 1–7 (1 — понедельник, 7 — воскресенье);
+- `users.username`, `users.email` — UNIQUE;
+- `users.student_id` — UNIQUE (один аккаунт на одного студента).
 
-## Работа с оценками
-
-Для создания оценки необходимо передать:
-
-```json
-{
-  "student_id": 1,
-  "discipline_id": 1,
-  "grade": 5
-}
-```
-
-Пример запроса:
-
-```bash
-curl -X POST http://127.0.0.1:5000/grades \
-  -H "Content-Type: application/json" \
-  -d '{"student_id":1,"discipline_id":1,"grade":5}'
-```
-
-При успешном создании возвращается:
-
-```text
-201 Created
-```
-
-Пример ответа:
-
-```json
-{
-  "id": 1,
-  "student_id": 1,
-  "discipline_id": 1,
-  "grade": 5,
-  "date": "2026-09-10"
-}
-```
-
-Получение всех оценок:
-
-```bash
-curl http://127.0.0.1:5000/grades
-```
-
-Получение оценки по ID:
-
-```bash
-curl http://127.0.0.1:5000/grades/1
-```
-
-Изменение оценки:
-
-```bash
-curl -X PUT http://127.0.0.1:5000/grades/1 \
-  -H "Content-Type: application/json" \
-  -d '{"grade":4}'
-```
-
-Удаление оценки:
-
-```bash
-curl -X DELETE http://127.0.0.1:5000/grades/1
-```
+Подробное обисание структуры базы данных: `docs/schema.md`.
 
 ## Бизнес-правила
 
-### Диапазон оценки
+### Оценки
 
-Оценка может принимать только значения:
+- значение оценки — только целое число от 1 до 5;
+- оценку можно выставить только по дисциплине, входящей в учебный план группы студента;
+- при нарушении правил сервер возвращает `400 Bad Request`, при отсутствии студента/дисциплины — `404 Not Found`.
 
-```text
-1
-2
-3
-4
-5
-```
+### Расписание
 
-Условие:
+- группа и дисциплина, указанные в занятии, должны существовать;
+- дисциплина должна присутствовать в учебном плане указанной группы;
+- день недели — целое число от 1 до 7;
+- время окончания должно быть позже времени начала;
+- у одной группы не может быть двух занятий, пересекающихся по времени в один день недели.
 
-```text
-1 <= grade <= 5
-```
+### Регистрация и роли
 
-Если передано другое значение, сервер возвращает:
-
-```text
-400 Bad Request
-```
-
-Например:
-
-```json
-{
-  "student_id": 1,
-  "discipline_id": 1,
-  "grade": 6
-}
-```
-
-является некорректным запросом.
-
-### Проверка учебного плана
-
-Оценка может быть выставлена студенту только по дисциплине, которая присутствует в учебном плане его группы.
-
-Порядок проверки:
-
-```text
-student_id
-    |
-    v
-Student
-    |
-    v
-group_id
-
-group_id + discipline_id
-          |
-          v
-      StudyPlan
-          |
-          v
-     запись есть?
-       /      \
-      да      нет
-      |        |
-      v        v
-   Grade    HTTP 400
-```
-
-Перед созданием оценки приложение:
-
-1. Получает студента по `student_id`.
-2. Проверяет существование студента.
-3. Получает группу студента.
-4. Проверяет существование дисциплины.
-5. Ищет запись `StudyPlan` по группе и дисциплине.
-6. Если запись отсутствует, создание оценки запрещается.
-7. Если запись существует, оценка сохраняется в базе данных.
-
-Условие проверки:
-
-```text
-StudyPlan.group_id = Student.group_id
-
-AND
-
-StudyPlan.discipline_id = requested_discipline_id
-```
-
-Если студент не существует:
-
-```text
-404 Not Found
-```
-
-Если дисциплина не существует:
-
-```text
-404 Not Found
-```
-
-Если дисциплина отсутствует в учебном плане:
-
-```text
-400 Bad Request
-```
+- новый пользователь всегда получает роль `student`;
+- username и email должны быть уникальны;
+- пароль — минимум 8 символов, хранится только в виде хеша;
+- роль `admin` невозможно получить через веб-интерфейс или API — только через CLI-команды `create-admin` / `set-role`.
 
 ## Обработка ошибок
 
-API использует стандартные HTTP-коды.
+Единый формат ошибок: `{"error": "текст ошибки"}`.
 
 | Ситуация | HTTP-код |
 |---|---|
 | Успешное получение данных | `200 OK` |
 | Успешное создание записи | `201 Created` |
-| Некорректный запрос | `400 Bad Request` |
-| Некорректная оценка | `400 Bad Request` |
-| Дисциплина отсутствует в StudyPlan | `400 Bad Request` |
+| Успешное удаление | `204 No Content` |
+| Некорректный запрос / нарушение бизнес-правила | `400 Bad Request` |
+| Недостаточно прав | `403 Forbidden` |
 | Ресурс не найден | `404 Not Found` |
 | Внутренняя ошибка сервера | `500 Internal Server Error` |
 
 ## Тестирование
 
-Для запуска всех автоматических тестов:
+Автоматические тесты используют изолированную временную SQLite-базу (создаётся и уничтожается на каждый тестовый прогон) — это сознательное решение, не связанное с отказом от PostgreSQL в целом: тесты не требуют внешнего сервера БД и работают быстрее, при этом полностью покрывают бизнес-логику, так как код работает с БД только через SQLAlchemy ORM.
+
+Запуск всех тестов:
 
 ```bash
 python -m pytest -v
 ```
 
-Для запуска тестов конкретного модуля:
+Запуск тестов конкретного модуля:
 
 ```bash
-python -m pytest tests/test_grades.py -v
+python -m pytest tests/test_schedules.py -v
 ```
 
-Тесты оценок проверяют:
+Тестовые модули:
 
-- создание оценки со значением 1;
-- создание оценки со значением 5;
-- запрет оценки 0;
-- запрет оценки 6;
-- попытку создания оценки для несуществующего студента;
-- попытку создания оценки для несуществующей дисциплины;
-- запрет оценки по дисциплине, отсутствующей в StudyPlan;
-- получение оценок;
-- получение оценки по ID;
-- изменение оценки;
-- удаление оценки.
+| Файл | Покрываемая функциональность |
+|---|---|
+| `test_health.py` | health-check |
+| `test_groups.py` | CRUD групп |
+| `test_students.py` | CRUD студентов |
+| `test_disciplines.py` | CRUD дисциплин |
+| `test_study_plans.py` | CRUD учебных планов |
+| `test_grades.py` | CRUD оценок и бизнес-правила |
+| `test_schedules.py` | CRUD расписания, пересечения занятий |
+| `test_auth.py` | регистрация и авторизация |
+| `test_permissions.py` | декораторы доступа по ролям |
+| `test_admin.py` | администрирование пользователей |
+| `test_commands.py` | CLI-команды create-admin, set-role |
+| `test_me.py` | личный кабинет студента |
 
 ## Статический анализ
-
-Для проверки качества и оформления Python-кода используется Flake8.
-
-Запуск:
 
 ```bash
 flake8 .
 ```
 
-Если команда завершается без вывода ошибок, статический анализ успешно пройден.
-
-Конфигурация Flake8 исключает из проверки служебные директории, например:
-
-```text
-.venv
-venv
-__pycache__
-.pytest_cache
-instance
-```
-
-## База данных
-
-На текущем этапе проекта используется SQLite.
-
-Пример строки подключения:
-
-```text
-sqlite:///studenttrack.db
-```
-
-SQLite используется для первой лабораторной работы и позволяет запускать проект без отдельного сервера базы данных.
-
-Работа с базой выполняется через SQLAlchemy.
-
-Файл базы данных не должен добавляться в Git.
-
-В дальнейших этапах проекта предусматривается переход на PostgreSQL.
+Если команда завершается без вывода — проверка пройдена успешно.
 
 ## Git-процесс
 
-Разработка выполняется через отдельные feature-ветки.
-
-Общий процесс:
+Разработка ведётся через отдельные feature-ветки с последующим Pull Request в `main`:
 
 ```text
-Issue
-  |
-  v
-Feature branch
-  |
-  v
-Commits
-  |
-  v
-Pull Request
-  |
-  v
-Code Review
-  |
-  v
-Merge into main
+Issue -> Feature branch -> Commits -> Pull Request -> Code Review -> Merge into main
 ```
 
 Примеры веток:
@@ -576,88 +504,34 @@ feature/flask-sqlite-init
 feature/disciplines
 feature/study-plans
 feature/crud-grades
+feature/groups-students-crud
+feature/front-ui
+feature/postgres-migration
 ```
 
-Для каждой задачи создается отдельная ветка.
-
-Изменения не должны отправляться непосредственно в `main`.
-
-После завершения задачи создается Pull Request.
-
-Перед объединением ветки необходимо проверить:
+Перед объединением ветки необходимо убедиться, что проходят тесты и статический анализ:
 
 ```bash
 python -m pytest -v
 flake8 .
 ```
 
-## Переменные и локальные файлы
-
-В Git не должны попадать:
-
-```text
-.env
-.venv/
-venv/
-__pycache__/
-.pytest_cache/
-instance/*.db
-instance/*.sqlite
-instance/*.sqlite3
-```
-
-Пример конфигурации для разработчика хранится в:
-
-```text
-.env.example
-```
-
 ## Документация
 
-Дополнительная документация находится в каталоге:
-
-```text
-docs/
-```
-
-Файл:
-
-```text
-docs/schema.md
-```
-
-содержит описание структуры базы данных, таблиц, внешних ключей и бизнес-правил.
-
-Файл:
-
-```text
-docs/api.md
-```
-
-предназначен для более подробного описания HTTP API.
+- `docs/schema.md` — структура базы данных, таблицы, внешние ключи, бизнес-правила;
+- `docs/api.md` — описание HTTP API.
 
 ## Статус проекта
 
-Проект находится в разработке.
+Реализовано и объединено в `main`:
 
-На текущем этапе основной задачей является создание минимально работоспособного Flask-приложения, которое включает:
+- HTTP API и веб-интерфейс (dashboard) с ролевой моделью;
+- регистрация, авторизация, управление пользователями;
+- CRUD для групп, студентов, дисциплин, учебных планов, оценок, расписания;
+- обработка ошибок, health-check;
+- автоматические тесты (102) и статический анализ кода.
 
-- HTTP API;
-- реляционную базу данных;
-- связанные сущности;
-- CRUD-операции;
-- бизнес-правила;
-- обработку ошибок;
-- автоматические тесты;
-- статический анализ;
-- командный Git-процесс.
+В процессе рассмотрения (Pull Request):
 
-Следующие этапы проекта могут включать:
-
-- PostgreSQL;
-- миграции базы данных;
-- Docker;
-- авторизацию;
-- разграничение ролей;
-- резервное копирование;
-- формирование отчетов.
+- переход основной СУБД с SQLite на PostgreSQL 16;
+- контейнеризация приложения и базы данных через Docker Compose.
