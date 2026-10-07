@@ -1,7 +1,6 @@
 .PHONY: setup run test quality health verify
 
 PYTHON = python
-HEALTH_URL = http://localhost:5000/health
 
 setup:
 	@echo "Installing project dependencies..."
@@ -23,18 +22,8 @@ quality:
 	@echo "Quality check completed successfully."
 
 health:
-	@echo "Checking StudentTrack health..."
-	@$(PYTHON) -c "import json, urllib.request; r = urllib.request.urlopen('$(HEALTH_URL)'); body = r.read().decode(); print('HTTP status:', r.status); print('Response:', body); assert r.status == 200; assert json.loads(body) == {'status': 'ok'}"
-	@echo "Health check completed successfully."
+	$(PYTHON) scripts/verify.py
 
 verify: test quality
-	@echo "Starting StudentTrack for health check..."
-	@$(PYTHON) run.py > .verify-server.log 2>&1 & \
-	PID=$$!; \
-	sleep 2; \
-	$(MAKE) health; \
-	STATUS=$$?; \
-	kill $$PID 2>/dev/null || true; \
-	rm -f .verify-server.log; \
-	if [ $$STATUS -ne 0 ]; then exit $$STATUS; fi
+	$(PYTHON) scripts/verify.py
 	@echo "Full verification completed successfully."
