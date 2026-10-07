@@ -32,6 +32,10 @@ def app():
     test_app = create_app(TestConfig)
 
     with test_app.app_context():
+        # Тестовая схема создаётся напрямую из моделей (без Alembic):
+        # миграции рассчитаны на PostgreSQL, а SQLite не поддерживает
+        # часть ALTER TABLE, поэтому в тестах используем create_all.
+        db.create_all()
         yield test_app
 
         db.session.remove()

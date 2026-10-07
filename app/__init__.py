@@ -40,9 +40,6 @@ def create_app(config_class=Config):
 
     app.register_blueprint(admin_bp)
 
-    with app.app_context():
-        db.create_all()
-
     register_commands(app)
 
     return app
