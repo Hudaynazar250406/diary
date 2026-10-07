@@ -12,11 +12,7 @@ class User(db.Model):
     ROLE_TEACHER = "teacher"
     ROLE_ADMIN = "admin"
 
-    ROLES = {
-        ROLE_STUDENT,
-        ROLE_TEACHER,
-        ROLE_ADMIN,
-    }
+    ROLES = {ROLE_STUDENT, ROLE_TEACHER, ROLE_ADMIN}
 
     id = db.Column(db.Integer, primary_key=True)
 
@@ -26,32 +22,24 @@ class User(db.Model):
         nullable=False,
         index=True,
     )
-
     email = db.Column(
         db.String(120),
         unique=True,
         nullable=False,
         index=True,
     )
-
-    password_hash = db.Column(
-        db.String(255),
-        nullable=False,
-    )
-
+    password_hash = db.Column(db.String(255), nullable=False)
     role = db.Column(
         db.String(20),
         nullable=False,
         default=ROLE_STUDENT,
     )
-
     student_id = db.Column(
         db.Integer,
         db.ForeignKey("students.id"),
         nullable=True,
         unique=True,
     )
-
     created_at = db.Column(
         db.DateTime,
         nullable=False,
@@ -60,9 +48,13 @@ class User(db.Model):
 
     student = db.relationship(
         "Student",
-        backref=db.backref(
-            "user_account",
-            uselist=False,
+        backref=db.backref("user_account", uselist=False),
+    )
+
+    __table_args__ = (
+        db.CheckConstraint(
+            "role IN ('student', 'teacher', 'admin')",
+            name="check_user_role",
         ),
     )
 
@@ -70,10 +62,7 @@ class User(db.Model):
         self.password_hash = generate_password_hash(password)
 
     def check_password(self, password):
-        return check_password_hash(
-            self.password_hash,
-            password,
-        )
+        return check_password_hash(self.password_hash, password)
 
     def has_role(self, *roles):
         return self.role in roles

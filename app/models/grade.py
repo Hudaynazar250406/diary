@@ -7,14 +7,27 @@ class Grade(db.Model):
     __tablename__ = "grades"
 
     id = db.Column(db.Integer, primary_key=True)
-    student_id = db.Column(db.Integer, db.ForeignKey("students.id"), nullable=False)
-    discipline_id = db.Column(db.Integer, db.ForeignKey("disciplines.id"), nullable=False)
+    student_id = db.Column(
+        db.Integer,
+        db.ForeignKey("students.id"),
+        nullable=False,
+    )
+    discipline_id = db.Column(
+        db.Integer,
+        db.ForeignKey("disciplines.id"),
+        nullable=False,
+    )
     grade = db.Column(db.Integer, nullable=False)
     date = db.Column(db.Date, nullable=False, default=datetime.date.today)
-    discipline = db.relationship("Discipline")
+
+    student = db.relationship("Student", back_populates="grades")
+    discipline = db.relationship("Discipline", back_populates="grades")
 
     __table_args__ = (
-        db.CheckConstraint("grade >= 1 AND grade <= 5", name="check_grade_range"),
+        db.CheckConstraint(
+            "grade >= 1 AND grade <= 5",
+            name="check_grade_range",
+        ),
     )
 
     def to_dict(self):
