@@ -1,4 +1,4 @@
-.PHONY: setup run test quality health verify migrate backup restore up down
+.PHONY: setup run test quality health verify migrate backup restore up down coverage
 
 PYTHON = python
 
@@ -24,7 +24,7 @@ quality:
 health:
 	$(PYTHON) scripts/verify.py
 
-verify: test quality
+verify: test quality coverage
 	$(PYTHON) scripts/verify.py
 	@echo "Full verification completed successfully."
 
@@ -46,3 +46,8 @@ up:
 
 down:
 	docker compose down
+
+coverage:
+	@echo "Running coverage..."
+	$(PYTHON) -m pytest --cov=app --cov-report=term-missing --cov-fail-under=80 -q
+	@echo "Coverage check completed successfully."
