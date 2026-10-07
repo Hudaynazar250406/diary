@@ -7,6 +7,7 @@ class Group(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     group_name = db.Column(db.String(50), nullable=False)
     year = db.Column(db.Integer, nullable=False)
+    curator = db.Column(db.String(100), nullable=True)
 
     students = db.relationship("Student", back_populates="group")
     study_plans = db.relationship("StudyPlan", back_populates="group")
@@ -21,4 +22,5 @@ class Group(db.Model):
             "id": self.id,
             "group_name": self.group_name,
             "year": self.year,
+            "curator": self.curator,
         }

@@ -9,13 +9,14 @@ class GroupService:
     def create(data):
         group_name = data.get("group_name")
         year = data.get("year")
+        curator = data.get("curator")
 
         if not group_name:
             return None, "group_name is required"
         if not year:
             return None, "year is required"
 
-        group = Group(group_name=group_name, year=year)
+        group = Group(group_name=group_name, year=year, curator=curator)
         db.session.add(group)
         db.session.commit()
 
@@ -47,6 +48,9 @@ class GroupService:
             if not year:
                 return None, "year cannot be empty"
             group.year = year
+
+        if "curator" in data:
+            group.curator = data.get("curator")
 
         db.session.commit()
         return group, None
