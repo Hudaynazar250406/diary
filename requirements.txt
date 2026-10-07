@@ -7,3 +7,4 @@ marshmallow==3.21.3
 pytest-cov==7.0.0
 # Используем доступную версию с бинарной сборкой:
 psycopg[binary]
+Flask-Migrate==4.1.0
