@@ -26,3 +26,4 @@ instance/*.sqlite3
 
 # Логи
 .log
+backups/
