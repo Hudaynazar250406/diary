@@ -1,8 +1,9 @@
 Flask==3.0.3
 Flask-SQLAlchemy==3.1.1
-psycopg2-binary==2.9.10
 python-dotenv==1.0.1
 pytest==8.3.2
 flake8==7.3.0
 marshmallow==3.21.3
 pytest-cov==7.0.0
+# Используем доступную версию с бинарной сборкой:
+psycopg[binary]
