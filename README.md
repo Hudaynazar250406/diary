@@ -154,7 +154,7 @@ pip install -r requirements.txt
 
 ## База данных
 
-Проект использует **PostgreSQL 16** в качестве основной СУБД.
+Проект использует **PostgreSQL 16+** в качестве основной СУБД.
 
 SQLite не используется для запуска приложения: при конкурентной записи нескольких пользователей одновременно (администратор, преподаватели, студенты) SQLite допускает только одну активную пишущую транзакцию и блокирует базу целиком, что приводит к ошибкам `database is locked`. PostgreSQL использует MVCC и построчные блокировки, обеспечивая корректную параллельную запись. Исключение — автоматические тесты, которые продолжают использовать изолированную временную SQLite-базу для быстрого прогона (см. раздел «Тестирование»).
 
@@ -164,7 +164,7 @@ SQLite не используется для запуска приложения:
 docker compose up -d db
 ```
 
-Подничт контейнер PostgreSQL 16 с базой `studenttrack`, пользователем `studenttrack` и паролем `studenttrack` на порте 5432.
+Поднимает контейнер PostgreSQL 16 с базой `studenttrack`, пользователем `studenttrack` и паролем `studenttrack` на порте 5432.
 
 Полный запуск приложения и базы данных одной командой:
 
@@ -198,7 +198,7 @@ cp .env.example .env
 Пример конфигурации:
 
 ```env
-DATABASE_URL=postgresql://studenttrack:studenttrack@localhost:5432/studenttrack
+DATABASE_URL=postgresql+psycopg://studenttrack:studenttrack@localhost:5432/studenttrack
 SECRET_KEY=replace-with-a-long-random-secret
 APP_PORT=5000
 FLASK_ENV=development
