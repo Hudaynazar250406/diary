@@ -1,7 +1,7 @@
 from flask import Flask
 
 from app.config import Config
-from app.extensions import db
+from app.extensions import db, migrate
 from app.errors import register_error_handlers
 
 from app.routes.health import health_bp
@@ -23,6 +23,7 @@ def create_app(config_class=Config):
     app.config.from_object(config_class)
 
     db.init_app(app)
+    migrate.init_app(app, db)
     register_error_handlers(app)
 
     app.register_blueprint(health_bp)
