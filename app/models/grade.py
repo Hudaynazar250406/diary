@@ -19,6 +19,7 @@ class Grade(db.Model):
     )
     grade = db.Column(db.Integer, nullable=False)
     date = db.Column(db.Date, nullable=False, default=datetime.date.today)
+    comment = db.Column(db.String(255), nullable=True)
 
     student = db.relationship("Student", back_populates="grades")
     discipline = db.relationship("Discipline", back_populates="grades")
