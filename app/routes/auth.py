@@ -1,9 +1,8 @@
-# from functools import wraps
 from flask import Blueprint, flash, g, redirect, render_template, request, session, url_for
 from sqlalchemy import func, or_
+
 from app.extensions import db
 from app.models.user import User
-# from app.permissions import login_required
 
 
 auth_bp = Blueprint("auth", __name__)
@@ -18,17 +17,6 @@ def load_logged_in_user():
         return
 
     g.user = db.session.get(User, user_id)
-
-
-# def login_required(view):
-#     @wraps(view)
-#     def wrapped_view(*args, **kwargs):
-#         if g.user is None:
-#             return redirect(url_for("auth.login"))
-
-#         return view(*args, **kwargs)
-
-#     return wrapped_view
 
 
 @auth_bp.route("/register", methods=["GET", "POST"])
