@@ -16,9 +16,9 @@ StudentTrack — веб-приложение на Flask для учёта усп
 - веб-интерфейс (dashboard) на Flask/Jinja2 с динамическим обновлением данных через JavaScript;
 - HTTP API в формате JSON;
 - единый формат обработки ошибок;
-- health-check приложения;
+- health-check приложения с идентификатором экземпляра;
 - хранение данных в PostgreSQL;
-- контейнеризация через Docker и Docker Compose;
+- контейнеризация через Docker и Docker Compose: Nginx-балансировщик, два экземпляра приложения, изолированная сеть, ограничения ресурсов, автоматическая проверка окружения (`make container-check`);
 - автоматические тесты (pytest) и статический анализ кода (flake8).
 
 ## Технологии
@@ -26,13 +26,15 @@ StudentTrack — веб-приложение на Flask для учёта усп
 - Python 3.13
 - Flask
 - Flask-SQLAlchemy / SQLAlchemy
-- PostgreSQL 16 (psycopg2-binary)
+- Flask-Migrate / Alembic
+- PostgreSQL 16 (драйвер psycopg 3)
+- Gunicorn
+- Nginx (обратный прокси и балансировщик)
 - Werkzeug (хеширование паролей)
-- Marshmallow (валидация)
 - python-dotenv
 - Jinja2, HTML/CSS, JavaScript (fetch API)
 - Docker, Docker Compose
-- pytest, pytest-cov, flake8
+- pytest, pytest-cov, pytest-xdist, flake8
 - Git, GitHub (feature-branch workflow, Pull Request)
 
 ## Структура проекта
@@ -71,8 +73,10 @@ diary/
 |   |   |-- admin.py
 |   |   \-- web.py
 |   |
-|   |-- schemas/
 |   |-- services/
+|   |   |-- group_service.py
+|   |   \-- student_service.py
+|   |
 |   |-- static/
 |   |   |-- css/style.css
 |   |   \-- js/dashboard.js
@@ -83,21 +87,21 @@ diary/
 |       |-- register.html
 |       \-- dashboard.html
 |
-|-- tests/
-|   |-- conftest.py
-|   |-- test_health.py
-|   |-- test_groups.py
-|   |-- test_students.py
-|   |-- test_disciplines.py
-|   |-- test_study_plans.py
-|   |-- test_grades.py
-|   |-- test_schedules.py
-|   |-- test_auth.py
-|   |-- test_permissions.py
-|   |-- test_admin.py
-|   |-- test_commands.py
-|   \-- test_me.py
+|-- migrations/
+|   |-- env.py
+|   \-- versions/
 |
+|-- nginx/
+|   \-- nginx.conf
+|
+|-- scripts/
+|   |-- backup.py
+|   |-- restore.py
+|   |-- verify.py
+|   \-- container_check.py
+|
+|-- backups/
+|-- reports/
 |-- docs/
 |   |-- api.md
 |   \-- schema.md
@@ -105,11 +109,15 @@ diary/
 |-- instance/
 |-- .env.example
 |-- .gitignore
+|-- .dockerignore
 |-- Dockerfile
 |-- docker-compose.yml
+|-- docker-compose.dev.yml
 |-- Makefile
 |-- requirements.txt
+|-- setup.cfg
 |-- run.py
+|-- CONTRIBUTING.md
 \-- README.md
 ```
 
@@ -152,37 +160,6 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-## База данных
-
-Проект использует **PostgreSQL 16+** в качестве основной СУБД.
-
-SQLite не используется для запуска приложения: при конкурентной записи нескольких пользователей одновременно (администратор, преподаватели, студенты) SQLite допускает только одну активную пишущую транзакцию и блокирует базу целиком, что приводит к ошибкам `database is locked`. PostgreSQL использует MVCC и построчные блокировки, обеспечивая корректную параллельную запись. Исключение — автоматические тесты, которые продолжают использовать изолированную временную SQLite-базу для быстрого прогона (см. раздел «Тестирование»).
-
-### Вариант 1. Через Docker (рекомендуется)
-
-```bash
-docker compose up -d db
-```
-
-Поднимает контейнер PostgreSQL 16 с базой `studenttrack`, пользователем `studenttrack` и паролем `studenttrack` на порте 5432.
-
-Полный запуск приложения и базы данных одной командой:
-
-```bash
-docker compose up --build
-```
-
-Приложение будет доступно на http://localhost:5000.
-
-### Вариант 2. Локальная установка PostgreSQL
-
-Установите PostgreSQL 16 (например, через `winget install --id=PostgreSQL.PostgreSQL.16 -e` на Windows) и создайте базу данных и пользователя:
-
-```sql
-CREATE USER studenttrack WITH PASSWORD 'studenttrack';
-CREATE DATABASE studenttrack OWNER studenttrack;
-```
-
 ## Переменные окружения
 
 Создайте файл `.env` на основе `.env.example`:
@@ -202,13 +179,152 @@ DATABASE_URL=postgresql+psycopg://studenttrack:studenttrack@localhost:5432/stude
 SECRET_KEY=replace-with-a-long-random-secret
 APP_PORT=5000
 FLASK_ENV=development
+
+# Переменные для docker compose (подставляются в docker-compose.yml)
+POSTGRES_USER=studenttrack
+POSTGRES_PASSWORD=studenttrack
+POSTGRES_DB=studenttrack
 ```
 
-Файл `.env` содержит локальную конфигурацию и не должен добавляться в Git.
+Файл `.env` содержит локальную конфигурацию и не должен добавляться в Git. Настройки в контейнеры передаются только через переменные окружения — секреты в образ не помещаются (`.env` исключён в `.dockerignore`).
 
-## Запуск приложения
+## Запуск в Docker (основной способ)
 
-При первом запуске таблицы создаются автоматически (`db.create_all()` внутри `create_app`).
+### Архитектура окружения
+
+```text
+                хост
+                  |
+               :8080 (единственный опубликованный порт, сеть frontend)
+                  |
+        [ nginx:1.27-alpine ]      <- балансировщик, retry на другой экземпляр
+            |           |
+   [ web x2 (gunicorn, USER app) ] <- replicas: 2, порты наружу не открыты
+                  |
+      [ postgres:16-alpine ]       <- порт БД не публикуется, данные в volume
+                  |
+       сеть backend (internal, без доступа наружу)
+```
+
+Эксплуатационные требования зафиксированы в `CONTRIBUTING.md`: нет тегов `latest`, приложение не от root, секреты только через переменные окружения, healthcheck у каждого сервиса, лишние порты не публикуются. Часть требований проверяется автоматически (см. `make container-check`).
+
+### Быстрый старт
+
+```bash
+cp .env.example .env        # задать SECRET_KEY
+docker compose up --build   # сборка и запуск всего окружения
+make migrate                # миграции БД внутри контейнера
+```
+
+Приложение доступно через Nginx: http://localhost:8080
+
+| Порт | Назначение |
+|---|---|
+| `8080` | Nginx — единственный опубликованный порт (HTTP) |
+| `5000` | Gunicorn внутри сети `backend` — с хоста недоступен |
+| `5432` | PostgreSQL внутри сети `backend` — на хост не публикуется |
+
+### Автоматическая проверка окружения
+
+```bash
+make container-check
+```
+
+Скрипт `scripts/container_check.py` проверяет:
+
+- конфигурацию: отсутствие тегов `latest`, неопубликованность порта БД и порта приложения, наличие healthcheck у всех сервисов, внутреннюю сеть backend, непривилегированного пользователя в Dockerfile, минимум два экземпляра web;
+- сборку образа и запуск окружения (ожидание `healthy` у всех контейнеров);
+- доступность сервиса через Nginx;
+- балансировку: не менее двух разных идентификаторов `instance` в ответах `/health`;
+- пользователя процесса web (не `root`);
+- отказоустойчивость: остановку одного экземпляра, доступность сервиса, корректное завершение контейнера по SIGTERM (код выхода 0) и восстановление экземпляра.
+
+Изменение контейнерного окружения принимается только при успешном выполнении этой команды.
+
+### Масштабирование и отказоустойчивость
+
+- Запущено два экземпляра приложения (`deploy.replicas: 2`). Встроенный DNS Docker отдаёт для имени `web` адреса обеих реплик; Nginx (`resolver 127.0.0.11 valid=5s`) периодически перечитывает список и распределяет запросы между экземплярами.
+- Ответ `/health` содержит `instance` — hostname контейнера, обработавшего запрос. Это позволяет увидеть балансировку на практике.
+- При недоступности одного экземпляра Nginx повторяет идемпотентный запрос на другом (`proxy_next_upstream error timeout http_502 http_503`). POST-запросы не дублируются.
+- Проверка вручную: `docker compose stop` одного контейнера web (например, `docker stop studenttrack-web-2`) — сервис продолжает отвечать через http://localhost:8080/health.
+
+Что ограничивает горизонтальное масштабирование приложения сейчас:
+
+- **PostgreSQL — единственный компонент с состоянием.** Реплики web читают и пишут в один primary-экземпляр; для масштабирования самой БД потребовалось бы внешнее решение (managed PostgreSQL, Patroni и т. п.). До этого предела сами реплики web масштабируются свободно.
+- **Миграции БД должны выполняться один раз** (`make migrate`), а не при старте каждой реплики, иначе возможна гонка между конкурирующими миграциями.
+- **Сессии — клиентские подписанные cookie Flask**, состояние на сервере не хранится, поэтому реплики взаимозаменяемы и sticky-сессии не нужны. Обязательное требование: одинаковый `SECRET_KEY` у всех экземпляров (задаётся через `.env`).
+- Общих файлов (загрузок) у приложения нет; при их появлении потребуется общее хранилище (общий volume или объектное хранилище).
+- Ограничения Nginx open source: нет активных проверок upstream, список реплик обновляется по DNS (`valid=5s`), а не мгновенно.
+
+### Сохранность данных, бэкап и восстановление
+
+Данные PostgreSQL хранятся в именованном volume `studenttrack_pgdata` и переживают пересоздание контейнеров и обновление образа:
+
+```bash
+# проверка сохранности после пересоздания
+docker compose down
+docker compose up -d
+# данные на месте
+```
+
+Резервное копирование и восстановление выполняются в контейнерной среде:
+
+```bash
+make backup     # pg_dump в backups/backup_YYYYMMDD_HHMMSS.sql
+make restore    # восстановление из последнего дампа (или: python scripts/restore.py backups/<файл>.sql)
+```
+
+Восстановление в новый (пустой) volume — полный сценарий:
+
+```bash
+docker compose down -v    # удалить контейнеры И volume (данные стёрты)
+docker compose up -d
+make restore              # данные восстановлены из дампа
+```
+
+### Остановка окружения
+
+```bash
+docker compose down
+```
+
+Приложение завершается корректно: Docker посылает SIGTERM, Gunicorn прекращает приём новых соединений и дожидается завершения текущих запросов (`stop_grace_period: 30s`).
+
+## База данных (локальная разработка без полного контура)
+
+Проект использует **PostgreSQL 16+** в качестве основной СУБД.
+
+SQLite не используется для запуска приложения: при конкурентной записи нескольких пользователей одновременно (администратор, преподаватели, студенты) SQLite допускает только одну активную пишущую транзакцию и блокирует базу целиком, что приводит к ошибкам `database is locked`. PostgreSQL использует MVCC и построчные блокировки, обеспечивая корректную параллельную запись. Исключение — автоматические тесты, которые продолжают использовать изолированную временную SQLite-базу для быстрого прогона (см. раздел «Тестирование»).
+
+### Вариант 1. БД в Docker, приложение локально
+
+В основном `docker-compose.yml` порт БД не публикуется. Для локальной разработки используется оверрейд `docker-compose.dev.yml`, который открывает порт 5432 на хост:
+
+```bash
+make dev-db
+python run.py
+```
+
+### Вариант 2. Локальная установка PostgreSQL
+
+Установите PostgreSQL 16 (например, через `winget install --id=PostgreSQL.PostgreSQL.16 -e` на Windows) и создайте базу данных и пользователя:
+
+```sql
+CREATE USER studenttrack WITH PASSWORD 'studenttrack';
+CREATE DATABASE studenttrack OWNER studenttrack;
+```
+
+## Запуск приложения локально
+
+Перед первым запуском примените миграции — они создают все таблицы в базе:
+
+```bash
+python -m flask --app run db upgrade
+```
+
+(в контейнерном окружении та же операция — `make migrate`).
+
+Запуск:
 
 ```bash
 python run.py
@@ -243,14 +359,16 @@ GET /health
 ```
 
 ```bash
-curl http://127.0.0.1:5000/health
+curl http://localhost:8080/health    # контейнерное окружение (через Nginx)
+curl http://127.0.0.1:5000/health    # локальный запуск
 ```
 
-Ожидаемый ответ:
+Ожидаемый ответ (`instance` — hostname контейнера, обработавшего запрос):
 
 ```json
 {
-  "status": "ok"
+  "status": "ok",
+  "instance": "3f2a1b9c7d"
 }
 ```
 
@@ -279,7 +397,7 @@ curl http://127.0.0.1:5000/health
 
 | Метод | URL | Описание |
 |---|---|---|
-| GET | `/health` | Проверка работоспособности приложения |
+| GET | `/health` | Проверка работоспособности приложения; в ответе поле `instance` — идентификатор экземпляра |
 
 ### Аутентификация
 
@@ -409,7 +527,7 @@ students.id     -> users.student_id (unique)
 - `users.username`, `users.email` — UNIQUE;
 - `users.student_id` — UNIQUE (один аккаунт на одного студента).
 
-Подробное обисание структуры базы данных: `docs/schema.md`.
+Подробное описание структуры базы данных: `docs/schema.md`.
 
 ## Бизнес-правила
 
@@ -468,7 +586,7 @@ python -m pytest tests/test_schedules.py -v
 
 | Файл | Покрываемая функциональность |
 |---|---|
-| `test_health.py` | health-check |
+| `test_health.py` | health-check и идентификатор экземпляра |
 | `test_groups.py` | CRUD групп |
 | `test_students.py` | CRUD студентов |
 | `test_disciplines.py` | CRUD дисциплин |
@@ -516,6 +634,8 @@ python -m pytest -v
 flake8 .
 ```
 
+Для изменений контейнерного окружения дополнительно обязательна команда `make container-check`.
+
 ## Документация
 
 - `docs/schema.md` — структура базы данных, таблицы, внешние ключи, бизнес-правила;
@@ -529,9 +649,8 @@ flake8 .
 - регистрация, авторизация, управление пользователями;
 - CRUD для групп, студентов, дисциплин, учебных планов, оценок, расписания;
 - обработка ошибок, health-check;
-- автоматические тесты (102) и статический анализ кода.
-
-В процессе рассмотрения (Pull Request):
-
-- переход основной СУБД с SQLite на PostgreSQL 16;
-- контейнеризация приложения и базы данных через Docker Compose.
+- основная СУБД — PostgreSQL 16, миграции схемы через Alembic/Flask-Migrate;
+- контейнерное окружение: Nginx-балансировщик, два экземпляра приложения (Gunicorn, непривилегированный пользователь), PostgreSQL в изолированной сети с volume, ограничения ресурсов, healthcheck'и;
+- автоматическая проверка окружения (`make container-check`);
+- скрипты резервного копирования и восстановления базы данных (`scripts/backup.py`, `scripts/restore.py`);
+- автоматические тесты (103) и статический анализ кода.

@@ -11,7 +11,7 @@ WORKDIR /app
 # psycopg[binary] не требует gcc/libpq-dev — образ меньше
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir gunicorn
+    && pip install --no-cache-dir gunicorn==23.0.0
 
 # Отдельный непривилегированный пользователь
 RUN groupadd --system --gid 1000 app \

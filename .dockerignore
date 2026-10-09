@@ -23,3 +23,5 @@ reports
 tests
 Makefile
 docker-compose.yml
+docker-compose.dev.yml
+nginx
