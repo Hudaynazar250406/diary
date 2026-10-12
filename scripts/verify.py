@@ -26,7 +26,7 @@ def wait_for_health():
                 if r.status == 200:
                     body = r.read().decode()
                     data = json.loads(body)
-                    if data == {"status": "ok"}:
+                    if data.get("status") == "ok":
                         print(f"Health check OK: {body}")
                         return True
                     print(f"Unexpected /health response: {body}", file=sys.stderr)

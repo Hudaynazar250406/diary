@@ -25,5 +25,5 @@ instance/*.sqlite
 instance/*.sqlite3
 
 # Логи
-.log
+*.log
 backups/

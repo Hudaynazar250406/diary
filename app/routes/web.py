@@ -1,6 +1,5 @@
 from flask import Blueprint, redirect, render_template, url_for
 
-# from app.routes.auth import login_required
 from app.permissions import login_required
 
 

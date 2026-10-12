@@ -1,0 +1,11 @@
+# Оверрейд для локальной разработки (README, «Вариант 1» без полного контура):
+# публикует порт PostgreSQL на хост, чтобы приложение, запущенное локально
+# через `python run.py`, могло подключаться к БД в контейнере.
+#
+# Использование:  make dev-db
+# (docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d db)
+
+services:
+  db:
+    ports:
+      - "5432:5432"
