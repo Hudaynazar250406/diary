@@ -197,7 +197,7 @@ POSTGRES_DB=studenttrack
                   |
                :8080 (единственный опубликованный порт, сеть frontend)
                   |
-        [ nginx:1.27-alpine ]      <- балансировщик, retry на другой экземпляр
+        [ nginx:1.29-alpine ]      <- балансировщик, retry на другой экземпляр
             |           |
    [ web x2 (gunicorn, USER app) ] <- replicas: 2, порты наружу не открыты
                   |
