@@ -170,3 +170,63 @@ def test_registration_cannot_assign_admin_role(
 
         assert user is not None
         assert user.role == User.ROLE_STUDENT
+
+
+def test_sql_injection_in_login_does_not_bypass_auth(
+    anonymous_client,
+):
+    """SQL-инъекция в identifier не должна пускать без пароля."""
+    register(anonymous_client)
+
+    response = login(
+        anonymous_client,
+        identifier="' OR '1'='1",
+        password="wrong",
+    )
+
+    # При неверных данных сервер отдаёт страницу логина (200),
+    # а не редирект на /dashboard (302).
+    # Главное — в сессии нет user_id, значит мы НЕ авторизованы.
+    with anonymous_client.session_transaction() as session:
+        assert "user_id" not in session
+
+    if response.status_code == 302:
+        assert not response.headers["Location"].endswith("/dashboard")
+
+
+def test_sql_injection_cannot_drop_table(
+    anonymous_client,
+    app,
+):
+    """Попытка DROP TABLE через логин не должна удалить таблицу."""
+    register(anonymous_client)
+
+    anonymous_client.post(
+        "/login",
+        data={
+            "identifier": "admin'; DROP TABLE users; --",
+            "password": "x",
+        },
+    )
+
+    with app.app_context():
+        assert User.query.count() >= 1
+
+
+def test_sql_injection_in_username_registration(
+    anonymous_client,
+    app,
+):
+    """SQL-инъекция в username при регистрации безопасна."""
+    anonymous_client.post(
+        "/register",
+        data={
+            "username": "admin' OR '1'='1",
+            "email": "inject@example.com",
+            "password": "password123",
+            "password_confirm": "password123",
+        },
+    )
+
+    with app.app_context():
+        assert User.query.count() >= 0

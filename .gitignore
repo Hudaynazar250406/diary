@@ -18,6 +18,7 @@ __pycache__/
 .coverage
 coverage.xml
 htmlcov/
+coverage/
 
 # БД
 instance/*.db
@@ -27,3 +28,5 @@ instance/*.sqlite3
 # Логи
 *.log
 backups/
+
+.gremlins_cache/
