@@ -5,6 +5,7 @@ pytest==8.3.2
 flake8==7.3.0
 pytest-cov==7.0.0
 pytest-xdist==3.6.1
+pytest-gremlins==1.11.4
 # Используем доступную версию с бинарной сборкой:
 psycopg[binary]==3.3.6
 Flask-Migrate==4.1.0

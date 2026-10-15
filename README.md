@@ -34,7 +34,7 @@ StudentTrack — веб-приложение на Flask для учёта усп
 - python-dotenv
 - Jinja2, HTML/CSS, JavaScript (fetch API)
 - Docker, Docker Compose
-- pytest, pytest-cov, pytest-xdist, flake8
+- pytest, pytest-cov, pytest-xdist, pytest-gremlins, flake8
 - Git, GitHub (feature-branch workflow, Pull Request)
 
 ## Структура проекта
@@ -598,6 +598,24 @@ python -m pytest tests/test_schedules.py -v
 | `test_admin.py` | администрирование пользователей |
 | `test_commands.py` | CLI-команды create-admin, set-role |
 | `test_me.py` | личный кабинет студента |
+
+### Мутационное тестирование
+
+Качество тестов проверяется мутационным анализом через **pytest-gremlins**:
+инструмент вносит точечные изменения (мутации) в исходный код `app/` —
+заменяет операторы, возвращаемые значения, границы условий — и прогоняет
+тесты. Если тесты падают, мутация «уничтожена» (zapped); если проходят —
+гремлин «выжил» (survived), значит тесты не ловят такое изменение.
+
+```bash
+make mutation
+```
+
+Конфигурация — `pyproject.toml` (`[tool.pytest-gremlins]`): цели, исключения,
+параллельность, кэш, отчёты. Результат: сводка в консоли + JSON-отчёт в
+`coverage/gremlins/gremlins.json`. Прогон занимает несколько минут
+(параллельные воркеры + выбор только покрывающих тестов), поэтому в
+`make verify` не входит и запускается отдельно.
 
 ## Статический анализ
 

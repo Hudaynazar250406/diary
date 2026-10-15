@@ -1,4 +1,4 @@
-.PHONY: setup run test quality health verify migrate backup restore up down dev-db coverage container-check
+.PHONY: setup run test quality health verify migrate backup restore up down dev-db coverage mutation container-check
 
 PYTHON = python
 
@@ -28,6 +28,11 @@ coverage:
 	@echo "Running coverage..."
 	$(PYTHON) -m pytest --cov=app --cov-report=term-missing --cov-fail-under=80 -q -n auto
 	@echo "Coverage check completed successfully."
+
+mutation:
+	@echo "Running mutation tests (pytest-gremlins)..."
+	$(PYTHON) -m pytest --gremlins
+	@echo "Mutation testing completed."
 
 verify: test quality coverage
 	$(PYTHON) scripts/verify.py

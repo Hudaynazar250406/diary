@@ -1,0 +1,16 @@
+# Конфигурация мутационного тестирования (pytest-gremlins).
+# Запуск: make mutation  (pytest --gremlins)
+[tool.pytest-gremlins]
+# Что мутируем: исходники приложения (статика и шаблоны не мутируются).
+paths = ["app"]
+exclude = ["app/static/*", "app/templates/*"]
+# Параллельное выполнение и пакетный режим для скорости.
+workers = "auto"
+batch_size = 10
+# Инкрементальный кэш: повторные прогоны пропускают неизменённый код.
+cache = true
+# Отчёты: в консоль + JSON (для CI/истории).
+report = ["console", "json"]
+# Один гремлин не должен выполняться дольше минуты.
+mutant_timeout = 60
+coverage_timeout = 300
