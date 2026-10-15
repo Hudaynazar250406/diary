@@ -18,23 +18,27 @@ StudentTrack — веб-приложение на Flask для учёта усп
 - единый формат обработки ошибок;
 - health-check приложения с идентификатором экземпляра;
 - хранение данных в PostgreSQL;
+- поле «куратор» у учебной группы (опционально);
 - контейнеризация через Docker и Docker Compose: Nginx-балансировщик, два экземпляра приложения, изолированная сеть, ограничения ресурсов, автоматическая проверка окружения (`make container-check`);
-- автоматические тесты (pytest) и статический анализ кода (flake8).
+- ограничение частоты запросов на Nginx: 10 req/s на IP (burst 20), при превышении — `429 Too Many Requests`; health-check из лимита исключён;
+- автоматические тесты (pytest), мутационное тестирование (pytest-gremlins), статический анализ кода (flake8);
+- нагрузочное тестирование через Locust (`locustfile.py`).
 
 ## Технологии
 
-- Python 3.13
+- Python 3.14 (локальное окружение разработки; контейнерный образ — python:3.13-slim)
 - Flask
 - Flask-SQLAlchemy / SQLAlchemy
 - Flask-Migrate / Alembic
 - PostgreSQL 16 (драйвер psycopg 3)
 - Gunicorn
-- Nginx (обратный прокси и балансировщик)
+- Nginx (обратный прокси, балансировщик и ограничение частоты запросов)
 - Werkzeug (хеширование паролей)
 - python-dotenv
 - Jinja2, HTML/CSS, JavaScript (fetch API)
 - Docker, Docker Compose
 - pytest, pytest-cov, pytest-xdist, pytest-gremlins, flake8
+- Locust (нагрузочное тестирование, устанавливается отдельно)
 - Git, GitHub (feature-branch workflow, Pull Request)
 
 ## Структура проекта
@@ -106,6 +110,23 @@ diary/
 |   |-- api.md
 |   \-- schema.md
 |
+|-- tests/
+|   |-- conftest.py
+|   |-- test_health.py
+|   |-- test_groups.py
+|   |-- test_students.py
+|   |-- test_disciplines.py
+|   |-- test_study_plans.py
+|   |-- test_grades.py
+|   |-- test_schedules.py
+|   |-- test_auth.py
+|   |-- test_permissions.py
+|   |-- test_admin.py
+|   |-- test_commands.py
+|   |-- test_me.py
+|   |-- test_mutation_killers.py
+|   \-- test_mutation_killers_2.py
+|
 |-- instance/
 |-- .env.example
 |-- .gitignore
@@ -114,8 +135,10 @@ diary/
 |-- docker-compose.yml
 |-- docker-compose.dev.yml
 |-- Makefile
+|-- pyproject.toml
 |-- requirements.txt
 |-- setup.cfg
+|-- locustfile.py
 |-- run.py
 |-- CONTRIBUTING.md
 \-- README.md
@@ -255,6 +278,18 @@ make container-check
 - **Сессии — клиентские подписанные cookie Flask**, состояние на сервере не хранится, поэтому реплики взаимозаменяемы и sticky-сессии не нужны. Обязательное требование: одинаковый `SECRET_KEY` у всех экземпляров (задаётся через `.env`).
 - Общих файлов (загрузок) у приложения нет; при их появлении потребуется общее хранилище (общий volume или объектное хранилище).
 - Ограничения Nginx open source: нет активных проверок upstream, список реплик обновляется по DNS (`valid=5s`), а не мгновенно.
+
+### Ограничение частоты запросов (rate limit)
+
+На Nginx действует ограничение частоты запросов: `10 req/s` с одного IP-адреса, всплеск до `20` запросов (`burst=20 nodelay`); при превышении клиент получает `429 Too Many Requests`. Конфигурация — `limit_req_zone ... rate=10r/s` и `limit_req_status 429` в `nginx/nginx.conf`. Отдельный `location = /health` не подпадает под лимит, чтобы Docker healthcheck и мониторинг не получали `429` из-за чужого трафика.
+
+Проверка вручную:
+
+```bash
+# серия запросов, превышающая лимит
+for i in $(seq 1 30); do curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8080/groups; done
+# ожидается: 200 ... и затем 429
+```
 
 ### Сохранность данных, бэкап и восстановление
 
@@ -507,6 +542,8 @@ Student      1:N  Grade
 Student      1:1  User (через users.student_id)
 ```
 
+Модель `Group` дополнительно содержит опциональное поле `curator` (ФИО куратора группы, до 100 символов); уникальность — пара `group_name` + `year`.
+
 Связи внешних ключей:
 
 ```text
@@ -564,6 +601,7 @@ students.id     -> users.student_id (unique)
 | Некорректный запрос / нарушение бизнес-правила | `400 Bad Request` |
 | Недостаточно прав | `403 Forbidden` |
 | Ресурс не найден | `404 Not Found` |
+| Превышен лимит запросов (rate limit Nginx) | `429 Too Many Requests` |
 | Внутренняя ошибка сервера | `500 Internal Server Error` |
 
 ## Тестирование
@@ -598,6 +636,10 @@ python -m pytest tests/test_schedules.py -v
 | `test_admin.py` | администрирование пользователей |
 | `test_commands.py` | CLI-команды create-admin, set-role |
 | `test_me.py` | личный кабинет студента |
+| `test_mutation_killers.py` | граничные тесты, уничтожающие выживших мутантов (часть 1) |
+| `test_mutation_killers_2.py` | граничные тесты, уничтожающие выживших мутантов (часть 2) |
+
+Всего собирается 140 тестов.
 
 ### Мутационное тестирование
 
@@ -616,6 +658,33 @@ make mutation
 `coverage/gremlins/gremlins.json`. Прогон занимает несколько минут
 (параллельные воркеры + выбор только покрывающих тестов), поэтому в
 `make verify` не входит и запускается отдельно.
+
+### Нагрузочное тестирование
+
+Сценарий нагрузки описан в `locustfile.py` (Locust): виртуальные пользователи
+с периодом ожидания 1–3 секунды чаще запрашивают список групп (`/groups`,
+вес 3), реже — health-check (`/health`, вес 1).
+
+Locust не входит в `requirements.txt` и устанавливается отдельно:
+
+```bash
+pip install locust
+```
+
+Запуск веб-интерфейса Locust против контейнерного окружения:
+
+```bash
+locust -f locustfile.py --host http://localhost:8080
+```
+
+После открытия http://localhost:8089 задаётся число пользователей и темп
+спауна; в реальном времени отображаются RPS, время ответа и доля ошибок
+(включая `429` при превышении rate limit Nginx). Без веб-интерфейса —
+headless-режим:
+
+```bash
+locust -f locustfile.py --host http://localhost:8080 --headless -u 50 -r 5 -t 60s
+```
 
 ## Статический анализ
 
@@ -657,7 +726,10 @@ flake8 .
 ## Документация
 
 - `docs/schema.md` — структура базы данных, таблицы, внешние ключи, бизнес-правила;
-- `docs/api.md` — описание HTTP API.
+- `docs/api.md` — описание HTTP API;
+- `CONTRIBUTING.md` — требования к эксплуатации контейнерного окружения и порядок внесения изменений;
+- `reports/LR2.md` — отчёт о развёртывании и проверке защищённости системы;
+- `reports/LR4.md` — отчёт по контейнеризации и автоматической проверке окружения.
 
 ## Статус проекта
 
@@ -665,10 +737,12 @@ flake8 .
 
 - HTTP API и веб-интерфейс (dashboard) с ролевой моделью;
 - регистрация, авторизация, управление пользователями;
-- CRUD для групп, студентов, дисциплин, учебных планов, оценок, расписания;
+- CRUD для групп (с полем «куратор»), студентов, дисциплин, учебных планов, оценок, расписания;
 - обработка ошибок, health-check;
 - основная СУБД — PostgreSQL 16, миграции схемы через Alembic/Flask-Migrate;
 - контейнерное окружение: Nginx-балансировщик, два экземпляра приложения (Gunicorn, непривилегированный пользователь), PostgreSQL в изолированной сети с volume, ограничения ресурсов, healthcheck'и;
+- ограничение частоты запросов на Nginx (10 r/s на IP, `429` при превышении, `/health` исключён);
 - автоматическая проверка окружения (`make container-check`);
 - скрипты резервного копирования и восстановления базы данных (`scripts/backup.py`, `scripts/restore.py`);
-- автоматические тесты (103) и статический анализ кода.
+- автоматические тесты (140), мутационное тестирование (pytest-gremlins) и статический анализ кода;
+- сценарий нагрузочного тестирования на Locust (`locustfile.py`).
