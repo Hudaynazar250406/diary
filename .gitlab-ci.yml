@@ -27,7 +27,8 @@ default:
   interruptible: true
 
 .python-job:
-  image: python:3.13-slim
+  # Bookworm предоставляет клиент PostgreSQL 15, как у тестового сервиса.
+  image: python:3.13-slim-bookworm
   tags: [lab5-python]
   cache:
     key:
