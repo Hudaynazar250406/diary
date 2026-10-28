@@ -1,0 +1,10 @@
+title = "StudentTrack CI"
+[extend]
+useDefault = true
+
+[[rules]]
+id = "lab5-demo-secret"
+description = "Искусственный секрет для защиты ЛР5"
+regex = '''LAB5_DEMO_TOKEN\s*=\s*["']?(LAB5_[A-Za-z0-9]{32})'''
+secretGroup = 1
+keywords = ["LAB5_DEMO_TOKEN"]

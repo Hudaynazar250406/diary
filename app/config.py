@@ -1,22 +1,19 @@
 import os
+import secrets
 
 
 class Config:
     """Базовая конфигурация приложения."""
 
-    # ВАЖНО: префикс "+psycopg" указывает SQLAlchemy использовать psycopg 3.
-    # Без него SQLAlchemy пытается импортировать psycopg2 (старый драйвер),
-    # которого у нас в requirements.txt нет.
-    SQLALCHEMY_DATABASE_URI = os.getenv(
-        "DATABASE_URL",
-        "postgresql+psycopg://studenttrack:studenttrack@127.0.0.1:5432/studenttrack?connect_timeout=5",
-    )
+    # ДОПУЩЕНИЕ: без DATABASE_URL локальный запуск использует SQLite.
+    # Compose передаёт PostgreSQL URL с явным драйвером psycopg 3.
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL") or "sqlite:///studenttrack.db"
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
+    # Для нескольких воркеров обязательно задавать общий SECRET_KEY в окружении.
+    SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_hex(32)
 
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = "Lax"
-
     APP_PORT = int(os.getenv("APP_PORT", 5000))
     DEBUG = os.getenv("FLASK_ENV", "development") == "development"

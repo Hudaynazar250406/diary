@@ -1,0 +1,21 @@
+# ДОПУЩЕНИЕ: GitLab username владельца совпадает с GitHub username.
+# Для независимого approval добавьте реального второго участника в GitLab.
+/tests/** @Hudaynazar250406
+/Makefile @Hudaynazar250406
+/.flake8 @Hudaynazar250406
+/pyproject.toml @Hudaynazar250406
+/setup.cfg @Hudaynazar250406
+/.gitlab-ci.yml @Hudaynazar250406
+/CODEOWNERS @Hudaynazar250406
+/.gitlab/CODEOWNERS @Hudaynazar250406
+/.ci/** @Hudaynazar250406
+/scripts/** @Hudaynazar250406
+/.gitleaks.toml @Hudaynazar250406
+/requirements*.txt @Hudaynazar250406
+/migrations/** @Hudaynazar250406
+/Dockerfile @Hudaynazar250406
+/.dockerignore @Hudaynazar250406
+/docker-compose*.yml @Hudaynazar250406
+/nginx/** @Hudaynazar250406
+/.env.example @Hudaynazar250406
+/.gitignore @Hudaynazar250406

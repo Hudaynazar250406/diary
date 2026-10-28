@@ -25,3 +25,10 @@ Makefile
 docker-compose.yml
 docker-compose.dev.yml
 nginx
+.cache
+image.tar
+image.tar.gz
+.gitlab-ci.yml
+.ci
+.gitleaks.toml
+scripts/check_critical_files*
