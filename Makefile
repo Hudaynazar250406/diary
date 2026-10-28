@@ -82,3 +82,9 @@ security-fs:
 security-image:
 	mkdir -p reports
 	trivy image --input image.tar.gz --scanners vuln,secret --severity HIGH,CRITICAL --exit-code 1 --format sarif --output reports/trivy-image.sarif
+
+.PHONY: env-init
+
+# Для первого локального запуска; существующий .env не изменяется.
+env-init:
+	$(PYTHON) scripts/init_env.py

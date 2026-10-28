@@ -50,3 +50,8 @@ def test_guard_reads_coverage_threshold():
 
 def test_guard_ignores_commented_threshold():
     assert guard.thresholds('Makefile', '# pytest --cov-fail-under=100\npytest --cov-fail-under=70') == [70.0]
+
+
+def test_guard_rejects_removed_flake8_section():
+    with pytest.raises(ValueError):
+        guard.check_flake8('[flake8]\nignore=E203\n', '[other]\nvalue=1\n')

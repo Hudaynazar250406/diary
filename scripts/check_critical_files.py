@@ -49,6 +49,8 @@ def check_flake8(old, new):
     after = configparser.ConfigParser(interpolation=None)
     before.read_string(old)
     after.read_string(new)
+    require(not before.has_section('flake8') or after.has_section('flake8'),
+            'удалена секция flake8')
     for key in ('ignore', 'extend-ignore'):
         a = set(re.split(r'[\s,]+', before.get('flake8', key, fallback=''))) - {''}
         b = set(re.split(r'[\s,]+', after.get('flake8', key, fallback=''))) - {''}
