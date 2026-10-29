@@ -23,6 +23,9 @@ variables:
 
 default:
   interruptible: true
+  hooks:
+    pre_get_sources_script:
+      - git config --global url."http://host.docker.internal:8929/".insteadOf "http://localhost:8929/"
 
 .check-rules:
   rules:
