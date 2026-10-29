@@ -13,6 +13,7 @@ stages:
   - security
   - container-check
   - build
+  - container-scan
   - publish
 
 variables:
@@ -42,6 +43,7 @@ default:
     paths: [.cache/pip/]
   before_script:
     - set -eu
+    - sed -i -e 's|http://deb.debian.org|https://deb.debian.org|g' -e 's|http://security.debian.org|https://security.debian.org|g' /etc/apt/sources.list.d/debian.sources
     - apt-get update -qq
     - apt-get install -y --no-install-recommends make git postgresql-client
     - python -m pip install -r requirements.txt
@@ -55,13 +57,13 @@ default:
   variables:
     POSTGRES_USER: studenttrack_ci
     POSTGRES_DB: studenttrack_test
-    POSTGRES_PASSWORD: "$CI_JOB_TOKEN"
+    POSTGRES_PASSWORD: "$TEST_DB_PASSWORD"
     PGHOST: postgres
     PGPORT: "5432"
     PGUSER: studenttrack_ci
     PGDATABASE: studenttrack_test
-    PGPASSWORD: "$CI_JOB_TOKEN"
-    SECRET_KEY: "$CI_JOB_TOKEN"
+    PGPASSWORD: "$TEST_DB_PASSWORD"
+    SECRET_KEY: "$TEST_DB_PASSWORD"
     PYTEST_WORKERS: "0"
   before_script:
     - !reference [.python-job, before_script]
@@ -76,11 +78,14 @@ config-guard:
   image: python:3.13-slim
   tags: [lab5-python]
   before_script:
+    - set -eu
+    - sed -i -e 's|http://deb.debian.org|https://deb.debian.org|g' -e 's|http://security.debian.org|https://security.debian.org|g' /etc/apt/sources.list.d/debian.sources
     - apt-get update -qq
     - apt-get install -y --no-install-recommends git bash
     - mkdir -p reports
   script:
     - git fetch --no-tags origin "${CI_DEFAULT_BRANCH}" || true
+    - test -f scripts/check_critical_files.sh
     - bash scripts/check_critical_files.sh | tee reports/config-guard.log
   artifacts:
     when: always
@@ -172,7 +177,7 @@ gitleaks:
   needs: [{job: backup, artifacts: false}]
   script:
     - mkdir -p reports
-    - gitleaks git . --redact --report-format sarif --report-path reports/gitleaks.sarif
+    - gitleaks git . --redact --exit-code 1 --report-format sarif --report-path reports/gitleaks.sarif
   artifacts:
     when: always
     expire_in: 30 days
@@ -226,7 +231,7 @@ container-check:
     - {job: trivy-fs, artifacts: false}
   script:
     - export COMPOSE_PROJECT_NAME="lab5-${CI_PIPELINE_ID}-${CI_JOB_ID}"
-    - export POSTGRES_USER=studenttrack_ci POSTGRES_DB=studenttrack_ci POSTGRES_PASSWORD="$CI_JOB_TOKEN" SECRET_KEY="$CI_JOB_TOKEN"
+    - export POSTGRES_USER=studenttrack_ci POSTGRES_DB=studenttrack_ci POSTGRES_PASSWORD="$TEST_DB_PASSWORD" SECRET_KEY="$TEST_DB_PASSWORD"
     - cp .env.example .env
     - trap 'docker compose logs --no-color > reports/compose.log 2>&1 || true; docker compose down -v --remove-orphans || true; rm -f .env' EXIT
     - make container-check PYTHON=python3 2>&1 | tee reports/container-check.log
@@ -252,7 +257,7 @@ build:
 
 trivy-image:
   extends: .check-rules
-  stage: build
+  stage: container-scan
   image:
     name: aquasec/trivy:0.76.1
     entrypoint: [""]
@@ -277,6 +282,7 @@ publish:
     - {job: trivy-image, artifacts: false}
   script:
     - test -n "${CI_REGISTRY:-}" || { echo "Registry is not configured"; exit 1; }
+    - test -n "${CI_REGISTRY_IMAGE:-}" || { echo "CI_REGISTRY_IMAGE is not set"; exit 1; }
     - export DOCKER_CONFIG="$(mktemp -d)"
     - trap 'rm -rf "$DOCKER_CONFIG"' EXIT
     - printf '%s' "$CI_REGISTRY_PASSWORD" | docker login "$CI_REGISTRY" --username "$CI_REGISTRY_USER" --password-stdin

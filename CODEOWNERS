@@ -1,0 +1,4 @@
+/tests/ @your-username
+/.gitlab-ci.yml @your-username
+/Makefile @your-username
+/scripts/check_critical_files.sh @your-username
