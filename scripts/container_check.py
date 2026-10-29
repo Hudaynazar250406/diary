@@ -18,15 +18,19 @@
 выполнении этой команды (см. CONTRIBUTING.md).
 """
 import json
+import os
 import re
+import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
+import uuid
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BASE_URL = "http://127.0.0.1:8080"
+BASE_URL = ""
 HEALTH_TIMEOUT = 180
 FAILOVER_TIMEOUT = 30
 
@@ -46,12 +50,13 @@ def parse_compose_ps(stdout):
         return [json.loads(line) for line in text.splitlines() if line.strip()]
 
 
-def run(cmd, capture=True):
+def run(cmd, capture=True, env=None):
     return subprocess.run(
         cmd,
         cwd=ROOT,
         capture_output=capture,
         text=True,
+        env=env,
     )
 
 
@@ -108,7 +113,12 @@ def check_static_config():
 
     for name, svc in services.items():
         image = svc.get("image", "")
-        pinned = bool(image) and ":" in image and not image.endswith(":latest")
+        digest_pinned = "@sha256:" in image and bool(
+            re.search(r"@sha256:[0-9a-f]{64}$", image)
+        )
+        pinned = bool(image) and not image.endswith(":latest") and (
+            digest_pinned or bool(svc.get("build"))
+        )
         check(f"образ {name} запинован (не latest)", pinned, image or "нет image")
         hc = svc.get("healthcheck", {})
         hc_ok = bool(hc.get("test")) and not hc.get("disable", False)
@@ -129,13 +139,41 @@ def check_static_config():
     check("сеть backend внутренняя (internal)", bool(network.get("internal")))
 
     replicas = web.get("deploy", {}).get("replicas", 1)
-    check("запущено минимум два экземпляра web", replicas >= 2, f"replicas={replicas}")
+    check("настроены минимум две реплики web", replicas >= 2, f"replicas={replicas}")
+
+    for name, svc in services.items():
+        limits = svc.get("deploy", {}).get("resources", {}).get("limits", {})
+        check(f"лимиты CPU и памяти заданы для {name}",
+              bool(limits.get("cpus")) and bool(limits.get("memory")))
 
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
     users = re.findall(r"^USER\s+(\S+)", dockerfile, flags=re.MULTILINE)
     check("Dockerfile: приложение не от root",
           bool(users) and users[-1] not in ("root", "0"),
           f"USER {users[-1]}" if users else "USER не найден")
+
+    base_images = re.findall(r"^FROM\s+(\S+)", dockerfile, flags=re.MULTILINE)
+    check("базовые образы Dockerfile закреплены digest",
+          bool(base_images) and all(
+              re.search(r"@sha256:[0-9a-f]{64}$", image) for image in base_images
+          ))
+
+    dockerignore = (ROOT / ".dockerignore").read_text(encoding="utf-8").splitlines()
+    check("секретные env-файлы исключены из build context",
+          ".env" in dockerignore and ".env.*" in dockerignore)
+
+    lock_lines = (ROOT / "requirements-prod.lock").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    check("production dependencies полностью запинованы",
+          bool(lock_lines) and all(
+              line.strip() and "==" in line and not line.lstrip().startswith("#")
+              for line in lock_lines
+          ))
+
+    nginx_config = (ROOT / "nginx" / "nginx.conf").read_text(encoding="utf-8")
+    check("Nginx настроен на retry и rate limit",
+          "proxy_next_upstream" in nginx_config and "limit_req" in nginx_config)
 
 
 def check_build_and_up():
@@ -146,7 +184,22 @@ def check_build_and_up():
         print(r.stdout[-4000:] + r.stderr[-2000:], file=sys.stderr)
         return False
 
-    r = compose("up", "-d")
+    image = compose("config", "--format", "json")
+    image_name = json.loads(image.stdout)["services"]["web"]["image"]
+    inspected = run([
+        "docker", "image", "inspect", image_name,
+        "--format", "{{json .Config.Env}}",
+    ])
+    image_environment = inspected.stdout
+    secrets_absent = inspected.returncode == 0 and all(
+        secret not in image_environment
+        for secret in (os.environ["POSTGRES_PASSWORD"], os.environ["SECRET_KEY"])
+    )
+    check("секреты не встроены в образ", secrets_absent)
+    if not secrets_absent:
+        return False
+
+    r = compose("up", "-d", "--scale", "web=2")
     check("запуск окружения", r.returncode == 0)
     if r.returncode != 0:
         print(r.stderr[-2000:], file=sys.stderr)
@@ -219,29 +272,115 @@ def check_failover():
           f"{attempts} попыток")
 
     # Возвращаем остановленный экземпляр в строй
-    compose("up", "-d")
+    compose("up", "-d", "--scale", "web=2")
     check("экземпляр восстановлен", wait_all_healthy(HEALTH_TIMEOUT))
+
+
+def database_command(sql, *args):
+    return compose(
+        "exec", "-T", "db", "psql", "-v", "ON_ERROR_STOP=1",
+        "-U", os.environ["POSTGRES_USER"], "-d", os.environ["POSTGRES_DB"],
+        *args, "-c", sql,
+    )
+
+
+def check_migrations():
+    print("6. Миграции")
+    result = compose(
+        "exec", "-T", "web", "python", "-m", "flask", "--app", "run", "db", "upgrade"
+    )
+    check("миграции применяются в контейнере", result.returncode == 0,
+          result.stderr[-1000:])
+
+
+def check_persistence():
+    print("7. Сохранность данных после пересоздания БД")
+    schema = f"container_check_{uuid.uuid4().hex}"
+    marker = uuid.uuid4().hex
+    created = database_command(
+        f'CREATE SCHEMA "{schema}"; CREATE TABLE "{schema}".marker (value text); '
+        f'INSERT INTO "{schema}".marker VALUES (\'{marker}\');'
+    )
+    check("создана временная контрольная запись", created.returncode == 0)
+    if created.returncode != 0:
+        return
+
+    recreated = compose("up", "-d", "--force-recreate", "db")
+    healthy = recreated.returncode == 0 and wait_all_healthy(HEALTH_TIMEOUT)
+    check("PostgreSQL пересоздан", healthy)
+    read = database_command(
+        f'SELECT value FROM "{schema}".marker', "-tA"
+    ) if healthy else None
+    persisted = read is not None and read.returncode == 0 and read.stdout.strip() == marker
+    check("контрольная запись сохранилась в volume", persisted)
+    database_command(f'DROP SCHEMA "{schema}" CASCADE')
+
+
+def check_backup_restore():
+    print("8. Резервное копирование и восстановление в новый volume")
+    with tempfile.TemporaryDirectory(prefix="studenttrack-backup-") as backup_dir:
+        env = os.environ.copy()
+        env["BACKUP_DIR"] = backup_dir
+        backup = run([sys.executable, str(ROOT / "scripts" / "backup.py")], env=env)
+        dump_files = list(Path(backup_dir).glob("backup_*.sql"))
+        check("резервная копия создана", backup.returncode == 0 and len(dump_files) == 1,
+              backup.stderr[-1000:])
+        if backup.returncode != 0 or len(dump_files) != 1:
+            return
+
+        removed = compose("down", "-v", "--remove-orphans")
+        started = compose("up", "-d", "--scale", "web=2") if removed.returncode == 0 else removed
+        healthy = started.returncode == 0 and wait_all_healthy(HEALTH_TIMEOUT)
+        check("создано чистое окружение с новым volume", healthy)
+        if not healthy:
+            return
+
+        restored = run(
+            [sys.executable, str(ROOT / "scripts" / "restore.py"), str(dump_files[0])],
+            env=env,
+        )
+        check("дамп восстановлен в новый volume", restored.returncode == 0,
+              restored.stderr[-1000:])
+        version = database_command("SELECT version_num FROM alembic_version", "-tA")
+        check("после восстановления доступны миграции",
+              version.returncode == 0 and bool(version.stdout.strip()))
 
 
 def main():
     print("=== Контейнерная проверка StudentTrack ===")
-    check_static_config()
-    if failures:
-        return 1
-    if not check_build_and_up():
-        return 1
-    check_http()
-    check_non_root()
-    check_failover()
+    os.environ["COMPOSE_PROJECT_NAME"] = f"studenttrack-check-{uuid.uuid4().hex[:10]}"
+    with socket.socket() as port_socket:
+        port_socket.bind(("127.0.0.1", 0))
+        os.environ["NGINX_PORT"] = str(port_socket.getsockname()[1])
+    global BASE_URL
+    BASE_URL = f"http://127.0.0.1:{os.environ['NGINX_PORT']}"
+    os.environ["POSTGRES_USER"] = "container_check"
+    os.environ["POSTGRES_PASSWORD"] = uuid.uuid4().hex
+    os.environ["POSTGRES_DB"] = "container_check"
+    os.environ["SECRET_KEY"] = uuid.uuid4().hex
+    try:
+        check_static_config()
+        if not failures and check_build_and_up():
+            check_migrations()
+            if not failures:
+                check_persistence()
+            if not failures:
+                check_backup_restore()
+            if not failures:
+                check_http()
+                check_non_root()
+                check_failover()
 
-    print()
-    if failures:
-        print("ПРОВЕРКА НЕ ПРОЙДЕНА:", file=sys.stderr)
-        for f in failures:
-            print(f"  - {f}", file=sys.stderr)
-        return 1
-    print("Все проверки контейнерного окружения пройдены.")
-    return 0
+        print()
+        if failures:
+            print("ПРОВЕРКА НЕ ПРОЙДЕНА:", file=sys.stderr)
+            for failure in failures:
+                print(f"  - {failure}", file=sys.stderr)
+            return 1
+        print("Все проверки контейнерного окружения пройдены.")
+        return 0
+    finally:
+        compose("down", "-v", "--remove-orphans")
 
 
 if __name__ == "__main__":

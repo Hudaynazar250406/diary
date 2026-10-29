@@ -1,14 +1,15 @@
 """Восстановление БД из резервной копии через docker compose exec psql."""
 import subprocess
 import sys
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKUP_DIR = ROOT / "backups"
+BACKUP_DIR = Path(os.getenv("BACKUP_DIR", ROOT / "backups"))
 
 DB_SERVICE = "db"
-DB_USER = "studenttrack"
-DB_NAME = "studenttrack"
+DB_USER = os.environ["POSTGRES_USER"]
+DB_NAME = os.environ["POSTGRES_DB"]
 
 if len(sys.argv) > 1:
     dump_file = Path(sys.argv[1])

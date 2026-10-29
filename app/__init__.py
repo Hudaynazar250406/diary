@@ -19,8 +19,13 @@ from app.routes.schedules import schedules_bp
 
 
 def create_app(config_class=Config):
+    """Create and configure the Flask application instance."""
     app = Flask(__name__)
     app.config.from_object(config_class)
+    secret_key = app.config.get("SECRET_KEY")
+    if (not app.config.get("TESTING") and not app.config.get("DEBUG")
+            and (not secret_key or len(secret_key) < 32)):
+        raise RuntimeError("Production requires a SECRET_KEY of at least 32 characters")
 
     db.init_app(app)
     migrate.init_app(app, db)

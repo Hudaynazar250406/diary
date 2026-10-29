@@ -52,7 +52,7 @@ restore:
 	$(PYTHON) scripts/restore.py
 
 up:
-	docker compose up -d
+	docker compose up -d --scale web=2
 
 down:
 	docker compose down

@@ -1,16 +1,17 @@
 """Создание резервной копии БД через docker compose exec pg_dump."""
 import subprocess
 import sys
+import os
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-BACKUP_DIR = ROOT / "backups"
+BACKUP_DIR = Path(os.getenv("BACKUP_DIR", ROOT / "backups"))
 BACKUP_DIR.mkdir(exist_ok=True)
 
 DB_SERVICE = "db"
-DB_USER = "studenttrack"
-DB_NAME = "studenttrack"
+DB_USER = os.environ["POSTGRES_USER"]
+DB_NAME = os.environ["POSTGRES_DB"]
 
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 out_file = BACKUP_DIR / f"backup_{timestamp}.sql"

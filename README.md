@@ -137,6 +137,7 @@ diary/
 |-- Makefile
 |-- pyproject.toml
 |-- requirements.txt
+|-- requirements-prod.lock
 |-- setup.cfg
 |-- locustfile.py
 |-- run.py
@@ -198,18 +199,17 @@ cp .env.example .env
 Пример конфигурации:
 
 ```env
-DATABASE_URL=postgresql+psycopg://studenttrack:studenttrack@localhost:5432/studenttrack
-SECRET_KEY=replace-with-a-long-random-secret
+SECRET_KEY=<generate-a-random-secret-with-python-secrets>
 APP_PORT=5000
 FLASK_ENV=development
 
 # Переменные для docker compose (подставляются в docker-compose.yml)
 POSTGRES_USER=studenttrack
-POSTGRES_PASSWORD=studenttrack
+POSTGRES_PASSWORD=<set-a-unique-random-password>
 POSTGRES_DB=studenttrack
 ```
 
-Файл `.env` содержит локальную конфигурацию и не должен добавляться в Git. Настройки в контейнеры передаются только через переменные окружения — секреты в образ не помещаются (`.env` исключён в `.dockerignore`).
+Задайте `SECRET_KEY` (не менее 32 символов) и уникальный `POSTGRES_PASSWORD` до запуска. Например: `python -c "import secrets; print(secrets.token_urlsafe(48))"`. Compose завершится с ошибкой, если обязательные переменные не заданы. Файл `.env` содержит локальную конфигурацию и не должен добавляться в Git; он исключён из build context через `.dockerignore`.
 
 ## Запуск в Docker (основной способ)
 
@@ -220,22 +220,22 @@ POSTGRES_DB=studenttrack
                   |
                :8080 (единственный опубликованный порт, сеть frontend)
                   |
-        [ nginx:1.29-alpine ]      <- балансировщик, retry на другой экземпляр
+         [ nginx:1.29-alpine ]      <- балансировщик, образ закреплён digest
             |           |
    [ web x2 (gunicorn, USER app) ] <- replicas: 2, порты наружу не открыты
                   |
-      [ postgres:16-alpine ]       <- порт БД не публикуется, данные в volume
+       [ postgres:16-alpine ]      <- digest, порт не публикуется, данные в volume
                   |
        сеть backend (internal, без доступа наружу)
 ```
 
-Эксплуатационные требования зафиксированы в `CONTRIBUTING.md`: нет тегов `latest`, приложение не от root, секреты только через переменные окружения, healthcheck у каждого сервиса, лишние порты не публикуются. Часть требований проверяется автоматически (см. `make container-check`).
+Эксплуатационные требования зафиксированы в `CONTRIBUTING.md`: образы закреплены digest, приложение не от root, секреты только через переменные окружения, healthcheck у каждого сервиса, лишние порты не публикуются.
 
 ### Быстрый старт
 
 ```bash
-cp .env.example .env        # задать SECRET_KEY
-docker compose up --build   # сборка и запуск всего окружения
+cp .env.example .env        # заполнить SECRET_KEY и POSTGRES_PASSWORD
+docker compose up --build -d --scale web=2
 make migrate                # миграции БД внутри контейнера
 ```
 
@@ -255,18 +255,20 @@ make container-check
 
 Скрипт `scripts/container_check.py` проверяет:
 
-- конфигурацию: отсутствие тегов `latest`, неопубликованность порта БД и порта приложения, наличие healthcheck у всех сервисов, внутреннюю сеть backend, непривилегированного пользователя в Dockerfile, минимум два экземпляра web;
+- конфигурацию: digest внешних образов, отсутствие лишних портов, healthcheck, внутреннюю сеть backend, непривилегированного пользователя и лимиты ресурсов;
 - сборку образа и запуск окружения (ожидание `healthy` у всех контейнеров);
 - доступность сервиса через Nginx;
 - балансировку: не менее двух разных идентификаторов `instance` в ответах `/health`;
 - пользователя процесса web (не `root`);
+- применение миграций и сохранность контрольной записи при пересоздании PostgreSQL;
+- backup и восстановление данных в новый временный volume;
 - отказоустойчивость: остановку одного экземпляра, доступность сервиса, корректное завершение контейнера по SIGTERM (код выхода 0) и восстановление экземпляра.
 
-Изменение контейнерного окружения принимается только при успешном выполнении этой команды.
+Проверка использует отдельный случайно названный Compose-проект и тестовые секреты, затем удаляет только его контейнеры и volume (`down -v`). Основной проект и его данные не затрагиваются. Изменение контейнерного окружения принимается только при успешном выполнении этой команды.
 
 ### Масштабирование и отказоустойчивость
 
-- Запущено два экземпляра приложения (`deploy.replicas: 2`). Встроенный DNS Docker отдаёт для имени `web` адреса обеих реплик; Nginx (`resolver 127.0.0.11 valid=5s`) периодически перечитывает список и распределяет запросы между экземплярами.
+- Два экземпляра приложения запускаются через `docker compose up --scale web=2` (в том числе целью `make up`). Встроенный DNS Docker отдаёт для имени `web` адреса обеих реплик; Nginx периодически перечитывает список и распределяет запросы между экземплярами.
 - Ответ `/health` содержит `instance` — hostname контейнера, обработавшего запрос. Это позволяет увидеть балансировку на практике.
 - При недоступности одного экземпляра Nginx повторяет идемпотентный запрос на другом (`proxy_next_upstream error timeout http_502 http_503`). POST-запросы не дублируются.
 - Проверка вручную: `docker compose stop` одного контейнера web (например, `docker stop studenttrack-web-2`) — сервис продолжает отвечать через http://localhost:8080/health.
@@ -309,13 +311,9 @@ make backup     # pg_dump в backups/backup_YYYYMMDD_HHMMSS.sql
 make restore    # восстановление из последнего дампа (или: python scripts/restore.py backups/<файл>.sql)
 ```
 
-Восстановление в новый (пустой) volume — полный сценарий:
-
-```bash
-docker compose down -v    # удалить контейнеры И volume (данные стёрты)
-docker compose up -d
-make restore              # данные восстановлены из дампа
-```
+Восстановление в новый volume проверяется через `make container-check` в
+отдельном временном Compose-проекте. Не используйте `docker compose down -v`
+на рабочем проекте: эта команда удаляет volume и данные БД.
 
 ### Остановка окружения
 
