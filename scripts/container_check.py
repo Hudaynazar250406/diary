@@ -353,7 +353,8 @@ def main():
         port_socket.bind(("127.0.0.1", 0))
         os.environ["NGINX_PORT"] = str(port_socket.getsockname()[1])
     global BASE_URL
-    BASE_URL = f"http://127.0.0.1:{os.environ['NGINX_PORT']}"
+    check_host = os.environ.get("CHECK_HOST", "127.0.0.1")
+    BASE_URL = f"http://{check_host}:{os.environ['NGINX_PORT']}"
     os.environ["POSTGRES_USER"] = "container_check"
     os.environ["POSTGRES_PASSWORD"] = uuid.uuid4().hex
     os.environ["POSTGRES_DB"] = "container_check"

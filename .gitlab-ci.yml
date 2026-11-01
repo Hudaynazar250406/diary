@@ -232,6 +232,7 @@ container-check:
   script:
     - export COMPOSE_PROJECT_NAME="lab5-${CI_PIPELINE_ID}-${CI_JOB_ID}"
     - export POSTGRES_USER=studenttrack_ci POSTGRES_DB=studenttrack_ci POSTGRES_PASSWORD="$TEST_DB_PASSWORD" SECRET_KEY="$TEST_DB_PASSWORD"
+    - export CHECK_HOST=host.docker.internal
     - cp .env.example .env
     - trap 'docker compose logs --no-color > reports/compose.log 2>&1 || true; docker compose down -v --remove-orphans || true; rm -f .env' EXIT
     - make container-check PYTHON=python3 2>&1 | tee reports/container-check.log
