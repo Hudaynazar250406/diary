@@ -5,6 +5,8 @@
 - GitLab: `http://localhost:8929`
 - Проект: `http://localhost:8929/root/diary`
 - SSH Git URL: `ssh://git@localhost:2222/root/diary.git`
+- Локальный registry: `localhost:5050` (контейнер `registry`, образ `registry:2`,
+  volume `registry_data`; запуск: `docker start registry`)
 - Ветка CI: `chore/local-gitlab-ci`
 - Runner tags: `lab5-python`, `lab5-docker`
 
