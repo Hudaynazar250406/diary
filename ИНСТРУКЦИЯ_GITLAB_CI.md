@@ -106,7 +106,19 @@ docker compose stop
 
 cd C:/Users/User/gitlab-local
 docker compose stop
+
+docker stop registry
 ```
 
 Для обычной остановки используйте `stop`, а не удаление volumes: volumes содержат
 проекты, настройки GitLab и конфигурации Runner-ов.
+
+## Диагностика
+
+- `HTTP Basic: Access denied` при push — протухли учётные данные в Windows
+  Credential Manager; обновить через `git credential reject` + токен root.
+- Job падает с `timeout awaiting response headers` при pull образа — сеть до
+  Docker Hub нестабильна; у runner'ов стоит `pull_policy = "if-not-present"`,
+  достаточно повторить job.
+- Job «завис» в статусе running после перезапуска runner — снять через
+  `gitlab-rails runner 'Ci::Build.find(ID).drop!'` и повторить pipeline.
