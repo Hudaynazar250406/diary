@@ -211,19 +211,31 @@ trivy-fs:
     expire_in: 30 days
     paths: [reports/trivy-fs.sarif]
 
-.docker-job:
+# Все docker-операции выполняются в Docker-in-Docker:
+# job-контейнер (local/dind-cli:28) общается с изолированным daemon
+# (сервис local/dind:28) по TLS. Сокет хоста не монтируется.
+.dind-job:
   extends: .check-rules
-  tags: [lab5-docker]
-  resource_group: lab5-docker-host
+  tags: [lab5-python]
+  image: local/dind-cli:28
+  services:
+    - name: local/dind:28
+      alias: docker
+  variables:
+    DOCKER_HOST: tcp://docker:2376
+    DOCKER_TLS_CERTDIR: "/certs"
+    DOCKER_TLS_VERIFY: "1"
+    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
   before_script:
     - set -eu
     - mkdir -p reports
+    - until docker info >/dev/null 2>&1; do sleep 2; done
     - docker version
     - docker compose version
     - docker buildx version
 
 container-check:
-  extends: .docker-job
+  extends: .dind-job
   stage: container-check
   needs:
     - {job: gitleaks, artifacts: false}
@@ -232,7 +244,8 @@ container-check:
   script:
     - export COMPOSE_PROJECT_NAME="lab5-${CI_PIPELINE_ID}-${CI_JOB_ID}"
     - export POSTGRES_USER=studenttrack_ci POSTGRES_DB=studenttrack_ci POSTGRES_PASSWORD="$TEST_DB_PASSWORD" SECRET_KEY="$TEST_DB_PASSWORD"
-    - export CHECK_HOST=host.docker.internal
+    # Порты публикуются на dind-сервисе: из job-контейнера он доступен как "docker"
+    - export CHECK_HOST=docker
     - cp .env.example .env
     - trap 'docker compose logs --no-color > reports/compose.log 2>&1 || true; docker compose down -v --remove-orphans || true; rm -f .env' EXIT
     - make container-check PYTHON=python3 2>&1 | tee reports/container-check.log
@@ -242,14 +255,11 @@ container-check:
     paths: [reports/container-check.log, reports/compose.log]
 
 build:
-  extends: .docker-job
+  extends: .dind-job
   stage: build
   needs: [{job: container-check, artifacts: false}]
   script:
-    - builder="lab5-${CI_JOB_ID}"
-    - trap 'docker buildx rm "$builder" >/dev/null 2>&1 || true' EXIT
-    - docker buildx create --name "$builder" --driver docker-container --use
-    - docker buildx build --pull --load --tag "studenttrack:${CI_COMMIT_SHA}" --file Dockerfile . 2>&1 | tee reports/build.log
+    - docker buildx build --load --tag "studenttrack:${CI_COMMIT_SHA}" --file Dockerfile . 2>&1 | tee reports/build.log
     - docker save "studenttrack:${CI_COMMIT_SHA}" | gzip > image.tar.gz
   artifacts:
     when: always
@@ -273,7 +283,7 @@ trivy-image:
     paths: [reports/trivy-image.sarif]
 
 publish:
-  extends: .docker-job
+  extends: .dind-job
   stage: publish
   interruptible: false
   rules:

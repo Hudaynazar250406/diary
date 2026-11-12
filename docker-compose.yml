@@ -81,7 +81,10 @@ services:
           memory: 256M
 
   nginx:
-    image: nginx:1.29-alpine@sha256:5616878291a2eed594aee8db4dade5878cf7edcb475e59193904b198d9b830de
+    # Конфигурация встроена в образ (nginx/Dockerfile), а не bind-mount:
+    # иначе контейнерная проверка не работает в DinD (см. nginx/Dockerfile).
+    build: ./nginx
+    image: studenttrack-nginx:1.0.0
     restart: unless-stopped
     depends_on:
       web:
@@ -89,8 +92,6 @@ services:
     ports:
       # Единственный опубликованный порт окружения.
       - "${NGINX_PORT:-8080}:80"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
     networks:
       # frontend — внешняя сеть для опубликованного порта
       # (порты контейнера, висящего только на internal-сети, с хоста недоступны);
