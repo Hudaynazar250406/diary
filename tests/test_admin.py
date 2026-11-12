@@ -10,7 +10,7 @@ def create_user(
     role=User.ROLE_STUDENT,
     student_id=None,
 ):
-    with app.app_context():
+  #  with app.app_context():
         user = User(
             username=username,
             email=f"{username}@example.com",
