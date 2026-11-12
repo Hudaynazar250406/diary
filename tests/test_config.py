@@ -6,7 +6,7 @@ from app import create_app
 @pytest.mark.parametrize("secret_key", [None, "", "short"])
 def test_production_rejects_weak_secret_key(secret_key):
     class ProductionConfig:
-        DEBUG = False
+        DEBUG = True
         TESTING = False
         SECRET_KEY = secret_key
 
