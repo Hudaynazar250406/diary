@@ -158,7 +158,7 @@ gitleaks:
   needs: [{job: config-guard, artifacts: false}]
   script:
     - mkdir -p reports
-    - docker create --name gitleaks-check --entrypoint sh zricethezav/gitleaks:v8.24.3 -c 'sleep 600'
+    - docker create --name gitleaks-check --entrypoint sh zricethezav/gitleaks:v8.24.3 -c 'mkdir -p /workspace/reports && sleep 600'
     - docker cp . gitleaks-check:/workspace
     - docker start gitleaks-check
     - set +e
@@ -191,7 +191,7 @@ trivy-fs:
   needs: [{job: config-guard, artifacts: false}]
   script:
     - mkdir -p reports
-    - docker create --name trivy-fs-check --entrypoint sh aquasec/trivy:0.76.1 -c 'sleep 600'
+    - docker create --name trivy-fs-check --entrypoint sh aquasec/trivy:0.76.1 -c 'mkdir -p /workspace/reports && sleep 600'
     - docker cp . trivy-fs-check:/workspace
     - docker start trivy-fs-check
     - set +e
@@ -294,7 +294,7 @@ trivy-image:
   needs: [{job: build, artifacts: true}]
   script:
     - mkdir -p reports
-    - docker create --name trivy-image-check --entrypoint sh aquasec/trivy:0.76.1 -c 'sleep 600'
+    - docker create --name trivy-image-check --entrypoint sh aquasec/trivy:0.76.1 -c 'mkdir -p /workspace/reports && sleep 600'
     - docker cp image.tar.gz trivy-image-check:/workspace/image.tar.gz
     - docker start trivy-image-check
     - set +e
