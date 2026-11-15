@@ -33,25 +33,11 @@ default:
     - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH'
 
-.python-job:
-  extends: .check-rules
-  image: python:3.13-slim
-  tags: [lab5-python]
-  cache:
-    key:
-      files: [requirements.txt]
-    paths: [.cache/pip/]
-  before_script:
-    - set -eu
-    - sed -i -e 's|http://deb.debian.org|https://deb.debian.org|g' -e 's|http://security.debian.org|https://security.debian.org|g' /etc/apt/sources.list.d/debian.sources
-    - apt-get update -qq
-    - apt-get install -y --no-install-recommends make git postgresql-client
-    - python -m pip install -r requirements.txt
-    - mkdir -p reports backups
-
 .postgres-job:
-  extends: .python-job
+  extends: .dind-python-job
   services:
+    - name: local/dind:28
+      alias: docker
     - name: postgres:15
       alias: postgres
   variables:
@@ -66,22 +52,20 @@ default:
     SECRET_KEY: "$TEST_DB_PASSWORD"
     PYTEST_WORKERS: "0"
   before_script:
-    - !reference [.python-job, before_script]
+    - !reference [.dind-python-job, before_script]
     - export DATABASE_URL="postgresql+psycopg://${PGUSER}:${PGPASSWORD}@${PGHOST}:${PGPORT}/${PGDATABASE}"
     - export TEST_DATABASE_URL="${DATABASE_URL}"
     - for attempt in $(seq 1 60); do pg_isready -h "$PGHOST" -p "$PGPORT" -U "$PGUSER" -d "$PGDATABASE" && break; test "$attempt" = 60 && exit 1; sleep 2; done
     - psql --no-password -v ON_ERROR_STOP=1 -Atqc "SELECT 1"
 
 config-guard:
-  extends: .check-rules
+  extends: .dind-job
   stage: lint
-  image: python:3.13-slim
-  tags: [lab5-python]
+  image: local/dind-cli:28
   before_script:
     - set -eu
-    - sed -i -e 's|http://deb.debian.org|https://deb.debian.org|g' -e 's|http://security.debian.org|https://security.debian.org|g' /etc/apt/sources.list.d/debian.sources
-    - apt-get update -qq
-    - apt-get install -y --no-install-recommends git bash
+    - !reference [.dind-job, before_script]
+    - apk add --no-cache git bash
     - mkdir -p reports
   script:
     - git fetch --no-tags origin "${CI_DEFAULT_BRANCH}" || true
@@ -93,7 +77,7 @@ config-guard:
     paths: [reports/config-guard.log]
 
 lint:
-  extends: .python-job
+  extends: .dind-python-job
   stage: lint
   needs: [{job: config-guard, artifacts: false}]
   script: [make quality]
@@ -108,7 +92,7 @@ test:
   needs: [{job: lint, artifacts: false}]
   variables:
     PYTEST_ADDOPTS: "--junitxml=reports/junit.xml"
-  script: [make test]
+  script: - python -m pytest -v -n 0
   artifacts:
     when: always
     expire_in: 30 days
@@ -131,7 +115,7 @@ coverage:
     paths: [reports/coverage.xml]
 
 health:
-  extends: .python-job
+  extends: .postgres-job  
   stage: test
   needs: [{job: lint, artifacts: false}]
   script: [make health]
@@ -168,25 +152,30 @@ backup:
     paths: [backups/ci.dump, reports/backup-contents.txt]
 
 gitleaks:
-  extends: .check-rules
+  extends: .dind-job
   stage: security
-  image:
-    name: zricethezav/gitleaks:v8.24.3
-    entrypoint: [""]
-  tags: [lab5-python]
-  needs: [{job: backup, artifacts: false}]
+  needs: [{job: config-guard, artifacts: false}]
   script:
     - mkdir -p reports
-    - gitleaks git . --redact --exit-code 1 --report-format sarif --report-path reports/gitleaks.sarif
+    - docker create --name gitleaks-check --entrypoint sh zricethezav/gitleaks:v8.24.3 -c 'sleep 600'
+    - docker cp . gitleaks-check:/workspace
+    - docker start gitleaks-check
+    - set +e
+    - docker exec gitleaks-check gitleaks git /workspace --redact --exit-code 1 --report-format sarif --report-path /workspace/reports/gitleaks.sarif
+    - status=$?
+    - set -e
+    - docker cp gitleaks-check:/workspace/reports/. reports/ || true
+    - docker rm -f gitleaks-check
+    - test "$status" -eq 0
   artifacts:
     when: always
     expire_in: 30 days
     paths: [reports/gitleaks.sarif]
 
 pip-audit:
-  extends: .python-job
+  extends: .dind-python-job
   stage: security
-  needs: [{job: backup, artifacts: false}]
+  needs: [{job: config-guard, artifacts: false}]
   script:
     - python -m pip install pip-audit==2.9.0
     - python -m pip_audit --requirement requirements.txt --format=json --output=reports/pip-audit.json
@@ -196,16 +185,21 @@ pip-audit:
     paths: [reports/pip-audit.json]
 
 trivy-fs:
-  extends: .check-rules
+  extends: .dind-job
   stage: security
-  image:
-    name: aquasec/trivy:0.76.1
-    entrypoint: [""]
-  tags: [lab5-python]
-  needs: [{job: backup, artifacts: false}]
+  needs: [{job: config-guard, artifacts: false}]
   script:
     - mkdir -p reports
-    - trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --format sarif --output reports/trivy-fs.sarif .
+    - docker create --name trivy-fs-check --entrypoint sh aquasec/trivy:0.76.1 -c 'sleep 600'
+    - docker cp . trivy-fs-check:/workspace
+    - docker start trivy-fs-check
+    - set +e
+    - docker exec trivy-fs-check trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --format sarif --output /workspace/reports/trivy-fs.sarif /workspace
+    - status=$?
+    - set -e
+    - docker cp trivy-fs-check:/workspace/reports/. reports/ || true
+    - docker rm -f trivy-fs-check
+    - test "$status" -eq 0
   artifacts:
     when: always
     expire_in: 30 days
@@ -222,17 +216,38 @@ trivy-fs:
     - name: local/dind:28
       alias: docker
   variables:
-    DOCKER_HOST: tcp://docker:2376
-    DOCKER_TLS_CERTDIR: "/certs"
-    DOCKER_TLS_VERIFY: "1"
-    DOCKER_CERT_PATH: "$DOCKER_TLS_CERTDIR/client"
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
   before_script:
     - set -eu
     - mkdir -p reports
-    - until docker info >/dev/null 2>&1; do sleep 2; done
+    - |
+      for attempt in $(seq 1 60); do
+        docker info >/dev/null 2>&1 && break
+        if test "$attempt" = 60; then
+          docker info
+          exit 1
+        fi
+        sleep 2
+      done
     - docker version
     - docker compose version
     - docker buildx version
+
+.dind-python-job:
+  extends: .dind-job
+  cache:
+    key:
+      files: [requirements.txt]
+    paths: [.cache/pip/]
+  before_script:
+    - set -eu
+    - !reference [.dind-job, before_script]
+    - apk add --no-cache git bash python3 py3-virtualenv postgresql-client
+    - python3 -m venv .venv-ci
+    - . .venv-ci/bin/activate
+    - python -m pip install -r requirements.txt
+    - mkdir -p reports backups
 
 container-check:
   extends: .dind-job
@@ -244,8 +259,10 @@ container-check:
   script:
     - export COMPOSE_PROJECT_NAME="lab5-${CI_PIPELINE_ID}-${CI_JOB_ID}"
     - export POSTGRES_USER=studenttrack_ci POSTGRES_DB=studenttrack_ci POSTGRES_PASSWORD="$TEST_DB_PASSWORD" SECRET_KEY="$TEST_DB_PASSWORD"
-    # Порты публикуются на dind-сервисе: из job-контейнера он доступен как "docker"
+    # Каждый job получает отдельный DinD daemon, поэтому порт выбирается
+    # внутри его namespace и доступен job-контейнеру через alias docker
     - export CHECK_HOST=docker
+    - export NGINX_PORT=8080
     - cp .env.example .env
     - trap 'docker compose logs --no-color > reports/compose.log 2>&1 || true; docker compose down -v --remove-orphans || true; rm -f .env' EXIT
     - make container-check PYTHON=python3 2>&1 | tee reports/container-check.log
@@ -259,6 +276,10 @@ build:
   stage: build
   needs: [{job: container-check, artifacts: false}]
   script:
+    - builder="lab5-${CI_JOB_ID}"
+    - trap 'docker buildx rm "$builder" >/dev/null 2>&1 || true' EXIT
+    - docker buildx create --name "$builder" --driver docker-container --use
+    - docker buildx inspect --bootstrap
     - docker buildx build --load --tag "studenttrack:${CI_COMMIT_SHA}" --file Dockerfile . 2>&1 | tee reports/build.log
     - docker save "studenttrack:${CI_COMMIT_SHA}" | gzip > image.tar.gz
   artifacts:
@@ -267,16 +288,21 @@ build:
     paths: [image.tar.gz, reports/build.log]
 
 trivy-image:
-  extends: .check-rules
+  extends: .dind-job
   stage: container-scan
-  image:
-    name: aquasec/trivy:0.76.1
-    entrypoint: [""]
-  tags: [lab5-python]
   needs: [{job: build, artifacts: true}]
   script:
     - mkdir -p reports
-    - trivy image --input image.tar.gz --scanners vuln,secret --severity HIGH,CRITICAL --format sarif --output reports/trivy-image.sarif
+    - docker create --name trivy-image-check --entrypoint sh aquasec/trivy:0.76.1 -c 'sleep 600'
+    - docker cp image.tar.gz trivy-image-check:/workspace/image.tar.gz
+    - docker start trivy-image-check
+    - set +e
+    - docker exec trivy-image-check trivy image --input /workspace/image.tar.gz --scanners vuln,secret --severity HIGH,CRITICAL --format sarif --output /workspace/reports/trivy-image.sarif
+    - status=$?
+    - set -e
+    - docker cp trivy-image-check:/workspace/reports/. reports/ || true
+    - docker rm -f trivy-image-check
+    - test "$status" -eq 0
   artifacts:
     when: always
     expire_in: 30 days
@@ -287,7 +313,7 @@ publish:
   stage: publish
   interruptible: false
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "main"'
+  - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "chore/local-gitlab-ci"'
   needs:
     - {job: build, artifacts: true}
     - {job: trivy-image, artifacts: false}
