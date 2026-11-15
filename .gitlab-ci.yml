@@ -158,15 +158,16 @@ gitleaks:
   needs: [{job: config-guard, artifacts: false}]
   script:
     - mkdir -p reports
-    - docker create --name gitleaks-check --entrypoint sh zricethezav/gitleaks:v8.24.3 -c 'mkdir -p /workspace/reports && sleep 600'
+    - docker volume create gitleaks-vol
+    - docker create --name gitleaks-check -v gitleaks-vol:/workspace zricethezav/gitleaks:v8.24.3
     - docker cp . gitleaks-check:/workspace
-    - docker start gitleaks-check
     - set +e
-    - docker exec gitleaks-check gitleaks git /workspace --redact --exit-code 1 --report-format sarif --report-path /workspace/reports/gitleaks.sarif
+    - docker run --rm -v gitleaks-vol:/workspace zricethezav/gitleaks:v8.24.3 git /workspace --redact --exit-code 1 --report-format sarif --report-path /workspace/reports/gitleaks.sarif
     - status=$?
     - set -e
     - docker cp gitleaks-check:/workspace/reports/. reports/ || true
     - docker rm -f gitleaks-check
+    - docker volume rm gitleaks-vol || true
     - test "$status" -eq 0
   artifacts:
     when: always
@@ -191,15 +192,16 @@ trivy-fs:
   needs: [{job: config-guard, artifacts: false}]
   script:
     - mkdir -p reports
-    - docker create --name trivy-fs-check --entrypoint sh aquasec/trivy:0.76.1 -c 'mkdir -p /workspace/reports && sleep 600'
+    - docker volume create trivy-fs-vol
+    - docker create --name trivy-fs-check -v trivy-fs-vol:/workspace aquasec/trivy:0.76.1
     - docker cp . trivy-fs-check:/workspace
-    - docker start trivy-fs-check
     - set +e
-    - docker exec trivy-fs-check trivy fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --format sarif --output /workspace/reports/trivy-fs.sarif /workspace
+    - docker run --rm -v trivy-fs-vol:/workspace aquasec/trivy:0.76.1 fs --scanners vuln,secret,misconfig --severity HIGH,CRITICAL --format sarif --output /workspace/reports/trivy-fs.sarif /workspace
     - status=$?
     - set -e
     - docker cp trivy-fs-check:/workspace/reports/. reports/ || true
     - docker rm -f trivy-fs-check
+    - docker volume rm trivy-fs-vol || true
     - test "$status" -eq 0
   artifacts:
     when: always
@@ -294,15 +296,16 @@ trivy-image:
   needs: [{job: build, artifacts: true}]
   script:
     - mkdir -p reports
-    - docker create --name trivy-image-check --entrypoint sh aquasec/trivy:0.76.1 -c 'mkdir -p /workspace/reports && sleep 600'
+    - docker volume create trivy-image-vol
+    - docker create --name trivy-image-check -v trivy-image-vol:/workspace aquasec/trivy:0.76.1
     - docker cp image.tar.gz trivy-image-check:/workspace/image.tar.gz
-    - docker start trivy-image-check
     - set +e
-    - docker exec trivy-image-check trivy image --input /workspace/image.tar.gz --scanners vuln,secret --severity HIGH,CRITICAL --format sarif --output /workspace/reports/trivy-image.sarif
+    - docker run --rm -v trivy-image-vol:/workspace aquasec/trivy:0.76.1 image --input /workspace/image.tar.gz --scanners vuln,secret --severity HIGH,CRITICAL --format sarif --output /workspace/reports/trivy-image.sarif
     - status=$?
     - set -e
     - docker cp trivy-image-check:/workspace/reports/. reports/ || true
     - docker rm -f trivy-image-check
+    - docker volume rm trivy-image-vol || true
     - test "$status" -eq 0
   artifacts:
     when: always
