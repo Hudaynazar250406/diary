@@ -221,6 +221,8 @@ trivy-fs:
   variables:
     DOCKER_HOST: tcp://docker:2375
     DOCKER_TLS_CERTDIR: ""
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   before_script:
     - set -eu
     - mkdir -p reports
